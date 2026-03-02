@@ -190,7 +190,10 @@ export default function MenuPage() {
 
       {/* Fixed View Cart Button */}
       <div className="fixed bottom-8 right-6 left-6 flex justify-center pointer-events-none">
-        <button className="pointer-events-auto flex items-center gap-4 bg-orange-600 text-white px-8 py-4 rounded-2xl shadow-2xl shadow-orange-200 hover:bg-orange-700 transition-all active:scale-95 group">
+        <Link
+          href="/customer/cart"
+          className="pointer-events-auto flex items-center gap-4 bg-orange-600 text-white px-8 py-4 rounded-2xl shadow-2xl shadow-orange-200 hover:bg-orange-700 transition-all active:scale-95 group"
+        >
           <div className="relative">
             <ShoppingBag size={22} />
             <span className="absolute -top-2 -right-2 bg-white text-orange-600 text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center shadow-sm">
@@ -198,7 +201,7 @@ export default function MenuPage() {
             </span>
           </div>
           <span className="font-bold text-lg">View Order</span>
-        </button>
+        </Link>
       </div>
 
       {/* Modal */}
