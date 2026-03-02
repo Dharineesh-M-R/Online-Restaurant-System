@@ -1,49 +1,22 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
-import { 
-  Trash2, Plus, Minus, ArrowLeft, ReceiptText, 
-  Utensils, MessageSquareText, ChevronRight, Info 
-} from "lucide-react";
-
-interface CartItem {
-  id: number;
-  name: string;
-  price: number;
-  quantity: number;
-  isVeg: boolean;
-  notes?: string;
-}
+import { Trash2, Plus, Minus, ArrowLeft, ReceiptText, Utensils, MessageSquareText, ChevronRight, Info, Phone } from "lucide-react";
+import { useCart } from "../component/cartContext"; // Adjust import path as needed
 
 export default function CartPage() {
   const tableNumber = 12;
-
-  const [cart, setCart] = useState<CartItem[]>([
-    { id: 1, name: "Paneer Tikka Masala", price: 320, quantity: 1, isVeg: true, notes: "" },
-    { id: 2, name: "Butter Garlic Naan", price: 60, quantity: 2, isVeg: true, notes: "" },
-    { id: 3, name: "Chicken Biryani", price: 450, quantity: 1, isVeg: false, notes: "" },
-    { id: 4, name: "Mango Lassi", price: 120, quantity: 1, isVeg: true, notes: "" }
-  ]);
+  const { cart, updateQuantity, updateNotes, clearCart } = useCart();
   
+  // State for the phone number
   const [phoneNumber, setPhoneNumber] = useState("");
 
-  // Calculations
+  // Calculations derived directly from the global state
   const subtotal = cart.reduce((acc, item) => acc + item.price * item.quantity, 0);
   const gst = Math.round(subtotal * 0.05); // 5% GST
   const platformFee = 15;
-  const grandTotal = subtotal + gst + platformFee;
-
-  const updateQuantity = (id: number, delta: number) => {
-    const updated = cart.map(item => 
-      item.id === id ? { ...item, quantity: Math.max(0, item.quantity + delta) } : item
-    ).filter(item => item.quantity > 0);
-    setCart(updated);
-  };
-
-  const updateNotes = (id: number, text: string) => {
-    setCart(cart.map(item => item.id === id ? { ...item, notes: text } : item));
-  };
+  const grandTotal = subtotal > 0 ? subtotal + gst + platformFee : 0;
 
   return (
     <div className="min-h-screen bg-[#F8F9FB] flex flex-col font-sans">
@@ -58,7 +31,9 @@ export default function CartPage() {
             Table {tableNumber}
           </span>
         </div>
-        <button className="text-xs font-bold text-orange-600">Clear</button>
+        <button onClick={clearCart} className="text-xs font-bold text-orange-600 hover:text-orange-800">
+          Clear
+        </button>
       </header>
 
       <main className="flex-1 p-4 pb-60">
@@ -94,12 +69,11 @@ export default function CartPage() {
                         </div>
                       </div>
                       
-                      {/* Stepper with corrected visible quantity text */}
+                      {/* Stepper */}
                       <div className="flex items-center bg-gray-100 rounded-xl p-1">
                         <button onClick={() => updateQuantity(item.id, -1)} className="p-1.5 text-gray-600">
                           {item.quantity === 1 ? <Trash2 size={16} className="text-red-500" /> : <Minus size={16} />}
                         </button>
-                        {/* THE FIX IS HERE: `text-black font-extrabold` makes it visible */}
                         <span className="w-6 text-center text-black font-extrabold text-base">{item.quantity}</span>
                         <button onClick={() => updateQuantity(item.id, 1)} className="p-1.5 text-gray-600">
                           <Plus size={16} />
@@ -114,12 +88,31 @@ export default function CartPage() {
                         type="text" 
                         placeholder="Add cooking instructions..."
                         className="bg-transparent text-xs w-full outline-none text-gray-600"
-                        value={item.notes}
+                        value={item.notes || ""}
                         onChange={(e) => updateNotes(item.id, e.target.value)}
                       />
                     </div>
                   </div>
                 ))}
+              </div>
+            </div>
+
+            {/* --- Phone Number / Contact Info Section --- */}
+            <div className="bg-white rounded-3xl p-4 shadow-sm border border-gray-100">
+              <div className="flex justify-between items-end mb-3 ml-1 mr-1">
+                <h2 className="text-sm font-bold text-gray-400 uppercase tracking-widest">Contact Info</h2>
+                <span className="text-[10px] font-bold text-gray-300 uppercase tracking-wider bg-gray-50 px-2 py-0.5 rounded-md border border-gray-100">Optional</span>
+              </div>
+              <div className="flex items-center gap-3 bg-gray-50 rounded-xl px-4 py-3 border border-gray-100 focus-within:border-orange-500 focus-within:ring-1 transition-all">
+                <Phone size={18} className="text-gray-400" />
+                <input 
+                  type="tel" 
+                  placeholder="Enter your phone number"
+                  className="bg-transparent text-sm w-full outline-none text-gray-800 placeholder:text-gray-400 font-medium"
+                  value={phoneNumber}
+                  onChange={(e) => setPhoneNumber(e.target.value)}
+                  maxLength={10}
+                />
               </div>
             </div>
 
@@ -182,7 +175,10 @@ export default function CartPage() {
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <button className="bg-black text-white py-4 rounded-2xl font-bold flex flex-col items-center shadow-lg active:scale-95 transition-all">
+            <button 
+              onClick={() => console.log("Order Placed!", { cart, grandTotal, phoneNumber })}
+              className="bg-black text-white py-4 rounded-2xl font-bold flex flex-col items-center shadow-lg active:scale-95 transition-all"
+            >
               <span className="text-[9px] opacity-60 uppercase tracking-widest mb-0.5">Send to Kitchen</span>
               Place Order
             </button>

@@ -3,30 +3,18 @@
 import { useState } from "react";
 import { Search, ShoppingBag, X, Plus, Info, Home } from "lucide-react";
 import Link from "next/link";
-
-interface Dish {
-  id: number;
-  name: string;
-  price: number;
-  category: string;
-  description: string;
-  image: string;
-}
+import { useCart, Dish } from "../component/cartContext"; // Adjust import path as needed
 
 export default function MenuPage() {
+  const { addToCart, cartCount } = useCart(); // Pulling functions from context
+
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [selectedDish, setSelectedDish] = useState<Dish | null>(null);
 
   const tableNumber = 12;
 
-  const categories = [
-    "All",
-    "Starters",
-    "Main Course",
-    "Desserts",
-    "Beverages",
-  ];
+  const categories = ["All", "Starters", "Main Course", "Desserts", "Beverages"];
 
   const dishes: Dish[] = [
     {
@@ -34,54 +22,41 @@ export default function MenuPage() {
       name: "Paneer Butter Masala",
       price: 220,
       category: "Main Course",
-      description:
-        "Rich creamy tomato gravy with soft paneer cubes, finished with butter and fresh cream.",
-      image:
-        "https://images.unsplash.com/photo-1631452180519-c014fe946bc7?auto=format&fit=crop&q=80&w=400",
+      description: "Rich creamy tomato gravy with soft paneer cubes, finished with butter and fresh cream.",
+      image: "https://images.unsplash.com/photo-1631452180519-c014fe946bc7?auto=format&fit=crop&q=80&w=400",
+      isVeg: true,
     },
     {
       id: 2,
       name: "Veg Manchurian",
       price: 180,
       category: "Starters",
-      description:
-        "Crispy vegetable balls tossed in a tangy, spicy, and slightly sweet Indo-Chinese sauce.",
-      image:
-        "https://images.unsplash.com/photo-1623653387945-2fd25214f8fc?auto=format&fit=crop&q=80&w=400",
+      description: "Crispy vegetable balls tossed in a tangy, spicy, and slightly sweet Indo-Chinese sauce.",
+      image: "https://images.unsplash.com/photo-1623653387945-2fd25214f8fc?auto=format&fit=crop&q=80&w=400",
+      isVeg: true,
     },
     {
       id: 3,
       name: "Chocolate Brownie",
       price: 150,
       category: "Desserts",
-      description:
-        "Warm, gooey chocolate brownie served with a scoop of premium vanilla bean ice cream.",
-      image:
-        "https://images.unsplash.com/photo-1606313564200-e75d5e30476c?auto=format&fit=crop&q=80&w=400",
+      description: "Warm, gooey chocolate brownie served with a scoop of premium vanilla bean ice cream.",
+      image: "https://images.unsplash.com/photo-1606313564200-e75d5e30476c?auto=format&fit=crop&q=80&w=400",
+      isVeg: true,
     },
   ];
 
   const filteredDishes = dishes.filter((dish) => {
-    const matchesSearch = dish.name
-      .toLowerCase()
-      .includes(search.toLowerCase());
-    const matchesCategory =
-      selectedCategory === "All" || dish.category === selectedCategory;
+    const matchesSearch = dish.name.toLowerCase().includes(search.toLowerCase());
+    const matchesCategory = selectedCategory === "All" || dish.category === selectedCategory;
     return matchesSearch && matchesCategory;
   });
-
-  const addToCart = (dish: Dish) => {
-    // Replace with your actual cart logic later
-    console.log(`Added ${dish.name} to cart`);
-  };
 
   return (
     <div className="min-h-screen bg-stone-50 text-stone-900 pb-28">
       {/* Header */}
-      {/* Header */}
       <header className="px-6 py-8 flex justify-between items-end">
         <div className="flex items-center gap-4">
-          {/* Home Button */}
           <Link
             href="/"
             className="bg-white p-3 rounded-2xl shadow-sm border border-stone-100 hover:bg-orange-600 hover:text-white transition-all"
@@ -90,9 +65,7 @@ export default function MenuPage() {
           </Link>
 
           <div>
-            <h1 className="text-3xl font-black tracking-tight text-stone-900">
-              Our Menu
-            </h1>
+            <h1 className="text-3xl font-black tracking-tight text-stone-900">Our Menu</h1>
             <p className="text-stone-500 font-medium">
               Table No: <span className="text-orange-600">{tableNumber}</span>
             </p>
@@ -160,12 +133,8 @@ export default function MenuPage() {
 
             <div className="px-2 pb-2">
               <div className="flex justify-between items-start mb-1">
-                <h3 className="text-lg font-bold text-stone-800">
-                  {dish.name}
-                </h3>
-                <p className="text-lg font-black text-orange-600">
-                  ₹{dish.price}
-                </p>
+                <h3 className="text-lg font-bold text-stone-800">{dish.name}</h3>
+                <p className="text-lg font-black text-orange-600">₹{dish.price}</p>
               </div>
 
               <div className="flex justify-between items-center mt-6">
@@ -189,20 +158,22 @@ export default function MenuPage() {
       </div>
 
       {/* Fixed View Cart Button */}
-      <div className="fixed bottom-8 right-6 left-6 flex justify-center pointer-events-none">
-        <Link
-          href="/customer/cart"
-          className="pointer-events-auto flex items-center gap-4 bg-orange-600 text-white px-8 py-4 rounded-2xl shadow-2xl shadow-orange-200 hover:bg-orange-700 transition-all active:scale-95 group"
-        >
-          <div className="relative">
-            <ShoppingBag size={22} />
-            <span className="absolute -top-2 -right-2 bg-white text-orange-600 text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center shadow-sm">
-              3
-            </span>
-          </div>
-          <span className="font-bold text-lg">View Order</span>
-        </Link>
-      </div>
+      {cartCount > 0 && (
+        <div className="fixed bottom-8 right-6 left-6 flex justify-center pointer-events-none z-40">
+          <Link
+            href="/customer/cart"
+            className="pointer-events-auto flex items-center gap-4 bg-orange-600 text-white px-8 py-4 rounded-2xl shadow-2xl shadow-orange-200 hover:bg-orange-700 transition-all active:scale-95 group"
+          >
+            <div className="relative">
+              <ShoppingBag size={22} />
+              <span className="absolute -top-2 -right-2 bg-white text-orange-600 text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center shadow-sm">
+                {cartCount}
+              </span>
+            </div>
+            <span className="font-bold text-lg">View Order</span>
+          </Link>
+        </div>
+      )}
 
       {/* Modal */}
       {selectedDish && (
@@ -210,12 +181,8 @@ export default function MenuPage() {
           <div className="bg-white p-8 rounded-t-[3rem] sm:rounded-[3rem] max-w-md w-full shadow-2xl animate-in slide-in-from-bottom duration-300">
             <div className="flex justify-between items-start mb-6">
               <div>
-                <h2 className="text-2xl font-black text-stone-900 leading-tight">
-                  {selectedDish.name}
-                </h2>
-                <p className="text-orange-600 font-black text-xl mt-1">
-                  ₹{selectedDish.price}
-                </p>
+                <h2 className="text-2xl font-black text-stone-900 leading-tight">{selectedDish.name}</h2>
+                <p className="text-orange-600 font-black text-xl mt-1">₹{selectedDish.price}</p>
               </div>
               <button
                 onClick={() => setSelectedDish(null)}
@@ -225,9 +192,7 @@ export default function MenuPage() {
               </button>
             </div>
 
-            <p className="text-stone-500 leading-relaxed text-lg mb-8">
-              {selectedDish.description}
-            </p>
+            <p className="text-stone-500 leading-relaxed text-lg mb-8">{selectedDish.description}</p>
 
             <button
               onClick={() => {
