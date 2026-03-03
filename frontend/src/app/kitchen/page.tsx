@@ -1,10 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Order, Category } from "./types";
-import OrderCard from "./components/OrderCard";
-import CategoryTabs from "./components/CategoryTabs";
-import StockManager from "./components/StockManager";
+import { Order } from "./types";
+import KitchenColumn from "./components/KitchenColumn";
 
 const mockOrders: Order[] = [
   {
@@ -19,61 +17,56 @@ const mockOrders: Order[] = [
   {
     id: 2,
     table: 2,
-    items: [
-      { name: "Butter Chicken", category: "Curries" },
-      { name: "Hakka Noodles", category: "Noodles" },
-    ],
+    items: [{ name: "Butter Chicken", category: "Curries" }],
     status: "Preparing",
+  },
+  {
+    id: 3,
+    table: 6,
+    items: [{ name: "Hakka Noodles", category: "Noodles" }],
+    status: "Ready",
   },
 ];
 
 export default function KitchenPage() {
   const [orders, setOrders] = useState<Order[]>(mockOrders);
-  const [selectedCategory, setSelectedCategory] =
-    useState<Category | "All">("All");
 
-  const updateOrderStatus = (
-    id: number,
-    newStatus: Order["status"]
-  ) => {
+  const updateStatus = (id: number, status: Order["status"]) => {
     setOrders((prev) =>
       prev.map((order) =>
-        order.id === id ? { ...order, status: newStatus } : order
+        order.id === id ? { ...order, status } : order
       )
     );
   };
 
-  const filteredOrders =
-    selectedCategory === "All"
-      ? orders
-      : orders.filter((order) =>
-          order.items.some(
-            (item) => item.category === selectedCategory
-          )
-        );
-
   return (
-    <div className="min-h-screen bg-gray-100 text-black p-8">
-      <h1 className="text-3xl font-bold mb-6">
-        Kitchen Dashboard
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 to-gray-800 text-white p-8">
+      <h1 className="text-4xl font-bold mb-10">
+        🍽 Kitchen Live Board
       </h1>
 
-      <CategoryTabs
-        selectedCategory={selectedCategory}
-        setSelectedCategory={setSelectedCategory}
-      />
+      <div className="grid md:grid-cols-3 gap-6">
+        <KitchenColumn
+          title="Pending"
+          color="border-yellow-500"
+          orders={orders.filter((o) => o.status === "Pending")}
+          updateStatus={updateStatus}
+        />
 
-      <div className="grid md:grid-cols-2 gap-6 mt-6">
-        {filteredOrders.map((order) => (
-          <OrderCard
-            key={order.id}
-            order={order}
-            updateOrderStatus={updateOrderStatus}
-          />
-        ))}
+        <KitchenColumn
+          title="Preparing"
+          color="border-blue-500"
+          orders={orders.filter((o) => o.status === "Preparing")}
+          updateStatus={updateStatus}
+        />
+
+        <KitchenColumn
+          title="Ready"
+          color="border-green-500"
+          orders={orders.filter((o) => o.status === "Ready")}
+          updateStatus={updateStatus}
+        />
       </div>
-
-      <StockManager />
     </div>
   );
 }

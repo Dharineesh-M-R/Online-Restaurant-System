@@ -1,10 +1,3 @@
-export type Category =
-  | "Starters"
-  | "Curries"
-  | "Rices"
-  | "Noodles"
-  | "Biryanis";
-
 export type OrderStatus =
   | "Pending"
   | "Preparing"
@@ -13,7 +6,7 @@ export type OrderStatus =
 
 export interface OrderItem {
   name: string;
-  category: Category;
+  category: string;
 }
 
 export interface Order {
