@@ -26,13 +26,13 @@ export default function HomePage() {
           </p>
 
           <div className="flex flex-col sm:flex-row justify-center gap-4 sm:gap-6">
-            <Link href="/menu" className="w-full sm:w-auto">
+            <Link href="/customer/menu" className="w-full sm:w-auto">
               <button className="w-full sm:w-auto min-h-[48px] bg-white text-orange-600 px-6 py-3 rounded-xl font-semibold shadow-md active:scale-95 transition">
                 View Menu
               </button>
             </Link>
 
-            <Link href="/cart" className="w-full sm:w-auto">
+            <Link href="/customer/cart" className="w-full sm:w-auto">
               <button className="w-full sm:w-auto min-h-[48px] bg-black text-white px-6 py-3 rounded-xl font-semibold shadow-md active:scale-95 transition">
                 View Cart
               </button>
