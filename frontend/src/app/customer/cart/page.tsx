@@ -174,17 +174,13 @@ export default function CartPage() {
             </Link>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4">
             <button 
               onClick={() => console.log("Order Placed!", { cart, grandTotal, phoneNumber })}
               className="bg-black text-white py-4 rounded-2xl font-bold flex flex-col items-center shadow-lg active:scale-95 transition-all"
             >
               <span className="text-[9px] opacity-60 uppercase tracking-widest mb-0.5">Send to Kitchen</span>
               Place Order
-            </button>
-            <button className="bg-[#FF4F00] text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-orange-100 active:scale-95 transition-all">
-              <ReceiptText size={18} />
-              Get Bill
             </button>
           </div>
         </div>
