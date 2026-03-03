@@ -100,7 +100,7 @@ export default function CartPage() {
             {/* --- Phone Number / Contact Info Section --- */}
             <div className="bg-white rounded-3xl p-4 shadow-sm border border-gray-100">
               <div className="flex justify-between items-end mb-3 ml-1 mr-1">
-                <h2 className="text-sm font-bold text-gray-400 uppercase tracking-widest">Contact Info</h2>
+                <h2 className="text-sm font-bold text-gray-400 uppercase tracking-widest">Contact Info (OPTIONAL)</h2>
                 <span className="text-[10px] font-bold text-gray-300 uppercase tracking-wider bg-gray-50 px-2 py-0.5 rounded-md border border-gray-100">Optional</span>
               </div>
               <div className="flex items-center gap-3 bg-gray-50 rounded-xl px-4 py-3 border border-gray-100 focus-within:border-orange-500 focus-within:ring-1 transition-all">
