@@ -2,36 +2,60 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Trash2, Plus, Minus, ArrowLeft, ReceiptText, Utensils, MessageSquareText, ChevronRight, Info, Phone } from "lucide-react";
-import { useCart } from "../component/cartContext"; // Adjust import path as needed
+import {
+  Trash2,
+  Plus,
+  Minus,
+  ArrowLeft,
+  Utensils,
+  MessageSquareText,
+  ChevronRight,
+  Info,
+  Phone,
+} from "lucide-react";
+import { useCart } from "../component/cartContext";
 
 export default function CartPage() {
   const tableNumber = 12;
+
   const { cart, updateQuantity, updateNotes, clearCart } = useCart();
-  
-  // State for the phone number
+
   const [phoneNumber, setPhoneNumber] = useState("");
 
-  // Calculations derived directly from the global state
-  const subtotal = cart.reduce((acc, item) => acc + item.price * item.quantity, 0);
-  const gst = Math.round(subtotal * 0.05); // 5% GST
+  const [showPopup, setShowPopup] = useState(false);
+  const [serveCount, setServeCount] = useState(1);
+
+  const subtotal = cart.reduce(
+    (acc, item) => acc + item.price * item.quantity,
+    0,
+  );
+
+  const gst = Math.round(subtotal * 0.05);
   const platformFee = 15;
   const grandTotal = subtotal > 0 ? subtotal + gst + platformFee : 0;
 
   return (
     <div className="min-h-screen bg-[#F8F9FB] flex flex-col font-sans">
-      {/* --- Modern Header --- */}
+      {/* Header */}
       <header className="sticky top-0 z-20 bg-white/80 backdrop-blur-lg px-4 py-4 flex items-center justify-between border-b border-gray-100">
-        <Link href="/customer/menu" className="p-2 hover:bg-gray-100 rounded-full transition-all">
+        <Link
+          href="/customer/menu"
+          className="p-2 hover:bg-gray-100 rounded-full transition-all"
+        >
           <ArrowLeft size={22} className="text-gray-800" />
         </Link>
+
         <div className="flex flex-col items-center">
           <h1 className="text-base font-bold text-gray-900">Your Order</h1>
           <span className="text-[10px] bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">
             Table {tableNumber}
           </span>
         </div>
-        <button onClick={clearCart} className="text-xs font-bold text-orange-600 hover:text-orange-800">
+
+        <button
+          onClick={clearCart}
+          className="text-xs font-bold text-orange-600 hover:text-orange-800"
+        >
           Clear
         </button>
       </header>
@@ -42,7 +66,11 @@ export default function CartPage() {
             <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mb-6">
               <Utensils className="text-gray-300" size={36} />
             </div>
-            <h2 className="text-xl font-bold text-gray-900">Your cart is empty</h2>
+
+            <h2 className="text-xl font-bold text-gray-900">
+              Your cart is empty
+            </h2>
+
             <Link href="/customer/menu" className="mt-6">
               <button className="bg-[#FF4F00] text-white py-3 px-10 rounded-full font-bold shadow-lg shadow-orange-200">
                 Browse Menu
@@ -51,41 +79,70 @@ export default function CartPage() {
           </div>
         ) : (
           <div className="space-y-4">
-            {/* --- Cart Items Section --- */}
+            {/* Cart Items */}
             <div className="bg-white rounded-3xl p-4 shadow-sm border border-gray-100">
-              <h2 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-4 ml-1">Items Added</h2>
+              <h2 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-4 ml-1">
+                Items Added
+              </h2>
+
               <div className="divide-y divide-gray-50">
                 {cart.map((item) => (
-                  <div key={item.id} className="py-4 first:pt-0 last:pb-0">
+                  <div key={item.id} className="py-4">
                     <div className="flex justify-between items-start">
                       <div className="flex gap-2">
-                        {/* Veg/Non-Veg Badge */}
-                        <div className={`w-4 h-4 border-2 flex items-center justify-center mt-1 ${item.isVeg ? 'border-green-600' : 'border-red-600'}`}>
-                          <div className={`w-2 h-2 rounded-full ${item.isVeg ? 'bg-green-600' : 'bg-red-600'}`} />
+                        <div
+                          className={`w-4 h-4 border-2 flex items-center justify-center mt-1 ${
+                            item.isVeg ? "border-green-600" : "border-red-600"
+                          }`}
+                        >
+                          <div
+                            className={`w-2 h-2 rounded-full ${
+                              item.isVeg ? "bg-green-600" : "bg-red-600"
+                            }`}
+                          />
                         </div>
+
                         <div>
-                          <h3 className="font-bold text-gray-800">{item.name}</h3>
-                          <p className="text-sm font-semibold text-gray-500 mt-0.5">₹{item.price}</p>
+                          <h3 className="font-bold text-gray-800">
+                            {item.name}
+                          </h3>
+                          <p className="text-sm font-semibold text-gray-500">
+                            ₹{item.price}
+                          </p>
                         </div>
                       </div>
-                      
-                      {/* Stepper */}
+
+                      {/* Quantity */}
                       <div className="flex items-center bg-gray-100 rounded-xl p-1">
-                        <button onClick={() => updateQuantity(item.id, -1)} className="p-1.5 text-gray-600">
-                          {item.quantity === 1 ? <Trash2 size={16} className="text-red-500" /> : <Minus size={16} />}
+                        <button
+                          onClick={() => updateQuantity(item.id, -1)}
+                          className="p-1.5 text-gray-600"
+                        >
+                          {item.quantity === 1 ? (
+                            <Trash2 size={16} className="text-red-500" />
+                          ) : (
+                            <Minus size={16} />
+                          )}
                         </button>
-                        <span className="w-6 text-center text-black font-extrabold text-base">{item.quantity}</span>
-                        <button onClick={() => updateQuantity(item.id, 1)} className="p-1.5 text-gray-600">
+
+                        <span className="w-6 text-center text-black font-extrabold text-base">
+                          {item.quantity}
+                        </span>
+
+                        <button
+                          onClick={() => updateQuantity(item.id, 1)}
+                          className="p-1.5 text-gray-600"
+                        >
                           <Plus size={16} />
                         </button>
                       </div>
                     </div>
 
-                    {/* Instruction Input */}
+                    {/* Notes */}
                     <div className="mt-3 flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2">
                       <MessageSquareText size={14} className="text-gray-400" />
-                      <input 
-                        type="text" 
+                      <input
+                        type="text"
                         placeholder="Add cooking instructions..."
                         className="bg-transparent text-xs w-full outline-none text-gray-600"
                         value={item.notes || ""}
@@ -97,18 +154,19 @@ export default function CartPage() {
               </div>
             </div>
 
-            {/* --- Phone Number / Contact Info Section --- */}
+            {/* Phone Input */}
             <div className="bg-white rounded-3xl p-4 shadow-sm border border-gray-100">
-              <div className="flex justify-between items-end mb-3 ml-1 mr-1">
-                <h2 className="text-sm font-bold text-gray-400 uppercase tracking-widest">Contact Info (OPTIONAL)</h2>
-                <span className="text-[10px] font-bold text-gray-300 uppercase tracking-wider bg-gray-50 px-2 py-0.5 rounded-md border border-gray-100">Optional</span>
-              </div>
-              <div className="flex items-center gap-3 bg-gray-50 rounded-xl px-4 py-3 border border-gray-100 focus-within:border-orange-500 focus-within:ring-1 transition-all">
+              <h2 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-3">
+                Contact Info (OPTIONAL)
+              </h2>
+
+              <div className="flex items-center gap-3 bg-gray-50 rounded-xl px-4 py-3 border border-gray-100">
                 <Phone size={18} className="text-gray-400" />
-                <input 
-                  type="tel" 
+
+                <input
+                  type="tel"
                   placeholder="Enter your phone number"
-                  className="bg-transparent text-sm w-full outline-none text-gray-800 placeholder:text-gray-400 font-medium"
+                  className="bg-transparent text-sm w-full outline-none text-gray-800"
                   value={phoneNumber}
                   onChange={(e) => setPhoneNumber(e.target.value)}
                   maxLength={10}
@@ -116,76 +174,132 @@ export default function CartPage() {
               </div>
             </div>
 
-            {/* --- Bill Summary Card --- */}
+            {/* Bill */}
             <div className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100">
-              <h2 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-4">Bill Details</h2>
+              <h2 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-4">
+                Bill Details
+              </h2>
+
               <div className="space-y-3">
                 <div className="flex justify-between text-sm text-gray-600 font-medium">
                   <span>Item Total</span>
                   <span>₹{subtotal}</span>
                 </div>
+
                 <div className="flex justify-between text-sm text-gray-600 font-medium">
-                  <span className="flex items-center gap-1">GST (5%) <Info size={12} /></span>
+                  <span>GST (5%)</span>
                   <span>₹{gst}</span>
                 </div>
+
                 <div className="flex justify-between text-sm text-gray-600 font-medium pb-3 border-b border-dashed border-gray-200">
                   <span>Platform Fee</span>
                   <span>₹{platformFee}</span>
                 </div>
-                <div className="flex justify-between text-lg font-black text-gray-900 pt-1">
+
+                <div className="flex justify-between text-lg font-black text-gray-900">
                   <span>Grand Total</span>
                   <span>₹{grandTotal}</span>
                 </div>
-              </div>
-            </div>
-
-            {/* --- Recommendations --- */}
-            <div className="pt-2 overflow-hidden">
-              <h2 className="text-sm font-bold text-gray-800 mb-3 px-1">Commonly ordered with these</h2>
-              <div className="flex gap-3 overflow-x-auto pb-4 -mb-4 snap-x">
-                {[ {n: 'Extra Cheese', p: 40}, {n: 'Coke 300ml', p: 55}, {n: 'Gulab Jamun', p: 80} ].map((rec, i) => (
-                  <div key={i} className="min-w-[140px] bg-white p-3 rounded-2xl border border-gray-100 flex flex-col gap-2 snap-center">
-                    <span className="text-xs font-bold text-gray-700 leading-tight truncate">{rec.n}</span>
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-orange-600">₹{rec.p}</span>
-                      <button className="p-1 bg-orange-50 text-orange-600 rounded-lg"><Plus size={14}/></button>
-                    </div>
-                  </div>
-                ))}
               </div>
             </div>
           </div>
         )}
       </main>
 
-      {/* --- High Impact Sticky Bottom --- */}
+      {/* Bottom Section */}
       {cart.length > 0 && (
         <div className="fixed bottom-0 left-0 right-0 bg-white p-6 pb-8 rounded-t-[3rem] shadow-[0_-15px_50px_rgba(0,0,0,0.08)] z-30">
           <div className="flex items-center justify-between mb-6 px-2">
             <div>
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">Swipe up for details</p>
+              <p className="text-[10px] font-bold text-gray-400 uppercase">
+                Swipe up for details
+              </p>
+
               <div className="flex items-center gap-1">
-                <span className="text-2xl font-black text-gray-900">₹{grandTotal}</span>
-                <ChevronRight size={18} className="text-gray-400 rotate-[-90deg]" />
+                <span className="text-2xl font-black text-gray-900">
+                  ₹{grandTotal}
+                </span>
+
+                <ChevronRight
+                  size={18}
+                  className="text-gray-400 rotate-[-90deg]"
+                />
               </div>
             </div>
+
             <Link href="/customer/menu">
-              <button className="text-orange-600 font-bold text-sm bg-orange-50 px-4 py-2 rounded-full">Add More</button>
+              <button className="text-orange-600 font-bold text-sm bg-orange-50 px-4 py-2 rounded-full">
+                Add More
+              </button>
             </Link>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <button 
-              onClick={() => console.log("Order Placed!", { cart, grandTotal, phoneNumber })}
-              className="bg-black text-white py-4 rounded-2xl font-bold flex flex-col items-center shadow-lg active:scale-95 transition-all"
-            >
-              <span className="text-[9px] opacity-60 uppercase tracking-widest mb-0.5">Send to Kitchen</span>
-              Place Order
-            </button>
-            <button className="bg-[#FF4F00] text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-orange-100 active:scale-95 transition-all">
-              <ReceiptText size={18} />
-              Get Bill
-            </button>
+          <button
+            onClick={() => {
+              console.log(`Serve ${serveCount} ordered`, {
+                cart,
+                grandTotal,
+                phoneNumber,
+              });
+
+              setShowPopup(true);
+            }}
+            className="bg-black text-white py-4 rounded-2xl font-bold w-full shadow-lg active:scale-95 transition-all"
+          >
+            Place Order
+          </button>
+        </div>
+      )}
+
+      {/* Success Popup */}
+      {showPopup && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-6">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-sm text-center shadow-xl">
+            <h2 className="text-xl font-bold text-gray-900 mb-2">
+              Serve {serveCount} Ordered Successfully
+            </h2>
+
+            <p className="text-sm text-gray-500 mb-6">
+              Your order has been sent to the kitchen. It will take
+              approximately <b>15 minutes</b>.
+            </p>
+
+            <div className="flex flex-col gap-3">
+              <Link href="/customer/menu">
+                <button
+                  onClick={() => {
+                    setServeCount(serveCount + 1);
+                    setShowPopup(false);
+                  }}
+                  className="group w-full bg-gradient-to-r from-orange-500 to-orange-600 
+      text-white py-3.5 rounded-xl font-semibold text-sm flex items-center 
+      justify-center gap-2 shadow-md hover:shadow-lg 
+      hover:from-orange-600 hover:to-orange-700 
+      active:scale-95 transition-all"
+                >
+                  <Plus
+                    size={18}
+                    className="group-hover:rotate-90 transition-transform"
+                  />
+                  Order One More Serve
+                  <ChevronRight
+                    size={16}
+                    className="opacity-70 group-hover:translate-x-1 transition"
+                  />
+                </button>
+              </Link>
+
+              <button
+                onClick={() => {
+                  clearCart();
+                  setShowPopup(false);
+                }}
+                className="w-full bg-gray-100 text-gray-800 py-3 rounded-xl font-semibold 
+    text-sm hover:bg-gray-200 active:scale-95 transition-all"
+              >
+                Get Bill
+              </button>
+            </div>
           </div>
         </div>
       )}
