@@ -10,7 +10,6 @@ import {
   Utensils,
   MessageSquareText,
   ChevronRight,
-  Info,
   Phone,
 } from "lucide-react";
 import { useCart } from "../component/cartContext";
@@ -18,12 +17,20 @@ import { useCart } from "../component/cartContext";
 export default function CartPage() {
   const tableNumber = 12;
 
-  const { cart, updateQuantity, updateNotes, clearCart } = useCart();
+  const { cart, updateQuantity, updateNotes, clearCart, isLoaded } = useCart();
 
   const [phoneNumber, setPhoneNumber] = useState("");
-
   const [showPopup, setShowPopup] = useState(false);
   const [serveCount, setServeCount] = useState(1);
+
+  // Prevent hydration mismatch by not rendering until local storage is loaded
+  if (!isLoaded) {
+    return (
+      <div className="min-h-screen bg-[#F8F9FB] flex items-center justify-center">
+        <p className="text-gray-500 font-bold">Loading your cart...</p>
+      </div>
+    );
+  }
 
   const subtotal = cart.reduce(
     (acc, item) => acc + item.price * item.quantity,
@@ -271,11 +278,7 @@ export default function CartPage() {
                     setServeCount(serveCount + 1);
                     setShowPopup(false);
                   }}
-                  className="group w-full bg-gradient-to-r from-orange-500 to-orange-600 
-      text-white py-3.5 rounded-xl font-semibold text-sm flex items-center 
-      justify-center gap-2 shadow-md hover:shadow-lg 
-      hover:from-orange-600 hover:to-orange-700 
-      active:scale-95 transition-all"
+                  className="group w-full bg-gradient-to-r from-orange-500 to-orange-600 text-white py-3.5 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 shadow-md hover:shadow-lg hover:from-orange-600 hover:to-orange-700 active:scale-95 transition-all"
                 >
                   <Plus
                     size={18}
@@ -294,8 +297,7 @@ export default function CartPage() {
                   clearCart();
                   setShowPopup(false);
                 }}
-                className="w-full bg-gray-100 text-gray-800 py-3 rounded-xl font-semibold 
-    text-sm hover:bg-gray-200 active:scale-95 transition-all"
+                className="w-full bg-gray-100 text-gray-800 py-3 rounded-xl font-semibold text-sm hover:bg-gray-200 active:scale-95 transition-all"
               >
                 Get Bill
               </button>

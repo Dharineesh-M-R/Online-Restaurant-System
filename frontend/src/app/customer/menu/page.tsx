@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useCart, Dish } from "../component/cartContext";
 
 export default function MenuPage() {
-  const { addToCart, cartCount } = useCart();
+  const { addToCart, cartCount, isLoaded } = useCart();
 
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
@@ -15,31 +15,32 @@ export default function MenuPage() {
   const [categories, setCategories] = useState<string[]>(["All"]);
   const [dishes, setDishes] = useState<Dish[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null); // Added error state
 
   const tableNumber = 12;
 
   useEffect(() => {
     const fetchMenuData = async () => {
       try {
+        // Use environment variable for API URL, fallback to localhost
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+
         /* ---------------- FETCH CATEGORIES ---------------- */
-
-        const categoryRes = await fetch(
-          "http://localhost:5000/menu/categories"
-        );
+        const categoryRes = await fetch(`${apiUrl}/menu/categories`);
+        if (!categoryRes.ok) throw new Error("Failed to fetch categories");
         const categoryData = await categoryRes.json();
-
         const categoryNames = categoryData.categories.map((c: any) => c.name);
-
         setCategories(["All", ...categoryNames]);
 
         /* ---------------- FETCH MENU ITEMS ---------------- */
-
-        const menuRes = await fetch("http://localhost:5000/menu/items");
+        const menuRes = await fetch(`${apiUrl}/menu/items`);
+        if (!menuRes.ok) throw new Error("Failed to fetch menu items");
         const menuData = await menuRes.json();
-
         setDishes(menuData.menuItems);
+
       } catch (error) {
         console.error("Error fetching menu:", error);
+        setError("Failed to load the menu. Please try again later."); // Set error message
       } finally {
         setLoading(false);
       }
@@ -49,20 +50,24 @@ export default function MenuPage() {
   }, []);
 
   const filteredDishes = dishes.filter((dish) => {
-    const matchesSearch = dish.name
-      .toLowerCase()
-      .includes(search.toLowerCase());
-
-    const matchesCategory =
-      selectedCategory === "All" || dish.category === selectedCategory;
-
+    const matchesSearch = dish.name.toLowerCase().includes(search.toLowerCase());
+    const matchesCategory = selectedCategory === "All" || dish.category === selectedCategory;
     return matchesSearch && matchesCategory;
   });
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center text-xl font-bold">
+      <div className="min-h-screen flex items-center justify-center text-xl font-bold bg-stone-50 text-stone-900">
         Loading Menu...
+      </div>
+    );
+  }
+
+  // Handle error state gracefully
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-red-600 font-bold p-6 text-center bg-stone-50">
+        {error}
       </div>
     );
   }
@@ -97,7 +102,6 @@ export default function MenuPage() {
             className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400"
             size={20}
           />
-
           <input
             type="text"
             placeholder="Search for something tasty..."
@@ -143,7 +147,6 @@ export default function MenuPage() {
                   alt={dish.name}
                   className="w-full h-full object-cover"
                 />
-
                 <div className="absolute top-4 left-4 bg-white px-3 py-1 rounded-full text-xs font-bold">
                   {dish.category}
                 </div>
@@ -177,15 +180,14 @@ export default function MenuPage() {
         )}
       </div>
 
-      {/* Cart Button */}
-      {cartCount > 0 && (
-        <div className="fixed bottom-8 right-6 left-6 flex justify-center">
+      {/* Cart Button - Now safely wrapped with isLoaded check */}
+      {isLoaded && cartCount > 0 && (
+        <div className="fixed bottom-8 right-6 left-6 flex justify-center z-40">
           <Link
             href="/customer/cart"
             className="flex items-center gap-4 bg-orange-600 text-white px-8 py-4 rounded-2xl shadow-xl"
           >
             <ShoppingBag size={22} />
-
             <span className="font-bold text-lg">View Order ({cartCount})</span>
           </Link>
         </div>
@@ -197,18 +199,14 @@ export default function MenuPage() {
           <div className="bg-white p-8 rounded-3xl max-w-md w-full">
             <div className="flex justify-between">
               <h2 className="text-2xl font-bold">{selectedDish.name}</h2>
-
               <button onClick={() => setSelectedDish(null)}>
                 <X size={24} />
               </button>
             </div>
-
             <p className="text-orange-600 font-bold text-xl mt-2">
               ₹{selectedDish.price}
             </p>
-
             <p className="text-stone-500 mt-4">{selectedDish.description}</p>
-
             <button
               onClick={() => {
                 addToCart(selectedDish);

@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 
 // Shared interfaces
 export interface Dish {
@@ -10,7 +10,7 @@ export interface Dish {
   category: string;
   description: string;
   image: string;
-  isVeg?: boolean; // Added so it translates to the cart well
+  isVeg?: boolean;
 }
 
 export interface CartItem {
@@ -29,23 +29,43 @@ interface CartContextType {
   updateNotes: (id: number, text: string) => void;
   clearCart: () => void;
   cartCount: number;
+  isLoaded: boolean; // Added to prevent hydration mismatch
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
 export function CartProvider({ children }: { children: ReactNode }) {
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  // 1. Load from local storage on mount
+  useEffect(() => {
+    const savedCart = localStorage.getItem("restaurant_cart");
+    if (savedCart) {
+      try {
+        setCart(JSON.parse(savedCart));
+      } catch (error) {
+        console.error("Failed to parse cart from local storage", error);
+      }
+    }
+    setIsLoaded(true);
+  }, []);
+
+  // 2. Save to local storage whenever cart changes
+  useEffect(() => {
+    if (isLoaded) {
+      localStorage.setItem("restaurant_cart", JSON.stringify(cart));
+    }
+  }, [cart, isLoaded]);
 
   const addToCart = (dish: Dish) => {
     setCart((prevCart) => {
       const existingItem = prevCart.find((item) => item.id === dish.id);
       if (existingItem) {
-        // If it's already in the cart, just increase the quantity
         return prevCart.map((item) =>
           item.id === dish.id ? { ...item, quantity: item.quantity + 1 } : item
         );
       }
-      // If it's a new item, add it to the array
       return [
         ...prevCart,
         {
@@ -53,7 +73,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
           name: dish.name,
           price: dish.price,
           quantity: 1,
-          isVeg: dish.isVeg ?? true, // Default to true if not specified
+          isVeg: dish.isVeg ?? true,
           notes: "",
         },
       ];
@@ -78,17 +98,15 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const clearCart = () => setCart([]);
 
-  // Calculate total items for the notification bubble
   const cartCount = cart.reduce((total, item) => total + item.quantity, 0);
 
   return (
-    <CartContext.Provider value={{ cart, addToCart, updateQuantity, updateNotes, clearCart, cartCount }}>
+    <CartContext.Provider value={{ cart, addToCart, updateQuantity, updateNotes, clearCart, cartCount, isLoaded }}>
       {children}
     </CartContext.Provider>
   );
 }
 
-// Custom hook to easily use the cart anywhere
 export function useCart() {
   const context = useContext(CartContext);
   if (context === undefined) {
