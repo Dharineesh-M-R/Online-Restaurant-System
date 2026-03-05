@@ -12,7 +12,7 @@ export default function CartPage() {
   const router = useRouter();
 
   const { 
-    cart, updateQuantity, updateNotes, clearCart, isLoaded, serveCount, placedServes, placeCurrentOrder, tableNumber, sessionId
+    cart, updateQuantity, updateNotes, clearCurrentCart, isLoaded, serveCount, placedServes, placeCurrentOrder, tableNumber, sessionId
   } = useCart();
 
   const [phoneNumber, setPhoneNumber] = useState("");
@@ -39,7 +39,6 @@ export default function CartPage() {
     if (isOrdering) return;
     setIsOrdering(true);
     
-    // Simulate backend payload for your new workflow:
     const orderPayload = {
       sessionId: sessionId,
       tableNumber: tableNumber,
@@ -49,20 +48,19 @@ export default function CartPage() {
     };
     console.log("-> Sending to DB:", orderPayload);
 
-    // Save snapshot of current items into a Serve context
     placeCurrentOrder(); 
 
     setShowPopup(true);
 
     setTimeout(() => {
-      router.push("/customer/menu");
+      router.push(`/customer/menu?table=${tableNumber}`);
     }, 2500);
   };
 
   return (
     <div className="min-h-screen bg-[#F8F9FB] flex flex-col font-sans relative">
       <header className="sticky top-0 z-20 bg-white/80 backdrop-blur-lg px-4 py-4 flex items-center justify-between border-b border-gray-100">
-        <Link href="/customer/menu" className="p-2 hover:bg-gray-100 rounded-full transition-all">
+        <Link href={`/customer/menu?table=${tableNumber}`} className="p-2 hover:bg-gray-100 rounded-full transition-all">
           <ArrowLeft size={22} className="text-gray-800" />
         </Link>
         <div className="flex flex-col items-center">
@@ -71,14 +69,18 @@ export default function CartPage() {
             Table {tableNumber}
           </span>
         </div>
-        <button onClick={clearCart} className="text-xs font-bold text-orange-600 hover:text-orange-800 transition-colors">
-          Clear All
-        </button>
+        
+        {cart.length > 0 ? (
+          <button onClick={clearCurrentCart} className="text-xs font-bold text-orange-600 hover:text-orange-800 transition-colors">
+            Clear New
+          </button>
+        ) : (
+          <div className="w-14"></div>
+        )}
       </header>
 
       <main className="flex-1 p-4 pb-48">
         
-        {/* Shows previous serves */}
         {placedServes.length > 0 && (
           <div className="bg-green-50 rounded-3xl p-4 shadow-sm border border-green-100 mb-5">
             <h2 className="text-xs font-bold text-green-700 uppercase tracking-widest mb-3 ml-1 flex items-center gap-1">
@@ -106,7 +108,7 @@ export default function CartPage() {
             </div>
             <h2 className="text-xl font-bold text-gray-900">No new items</h2>
             <p className="text-sm text-gray-500 mt-2 max-w-50">Add more dishes to start your next round.</p>
-            <Link href="/customer/menu" className="mt-8">
+            <Link href={`/customer/menu?table=${tableNumber}`} className="mt-8">
               <button className="bg-[#FF4F00] hover:bg-[#e64700] transition-colors text-white py-3 px-10 rounded-full font-bold shadow-lg shadow-orange-200">
                 Browse Menu
               </button>
@@ -156,7 +158,6 @@ export default function CartPage() {
               </div>
             </div>
             
-            {/* Bill Details */}
             <div className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100">
               <h2 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">New Round Bill</h2>
               <div className="space-y-3">

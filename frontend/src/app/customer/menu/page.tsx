@@ -1,20 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { 
-  Search, 
-  ShoppingBag, 
-  X, 
-  Plus, 
-  Info, 
-  Home, 
-  ReceiptText 
-} from "lucide-react";
+import { Search, ShoppingBag, X, Plus, Info, Home, ReceiptText } from "lucide-react";
 import Link from "next/link";
 import { useCart, Dish } from "../component/cartContext";
 
 export default function MenuPage() {
-  const { addToCart, cartCount, isLoaded, tableNumber } = useCart();
+  const { addToCart, cartCount, isLoaded, tableNumber } = useCart(); // Removed refreshTableOrders
 
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
@@ -28,16 +20,14 @@ export default function MenuPage() {
   useEffect(() => {
     const fetchMenuData = async () => {
       try {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://172.18.170.244:5000";
 
-        /* ---------------- FETCH CATEGORIES ---------------- */
         const categoryRes = await fetch(`${apiUrl}/menu/categories`);
         if (!categoryRes.ok) throw new Error("Failed to fetch categories");
         const categoryData = await categoryRes.json();
         const categoryNames = categoryData.categories.map((c: any) => c.name);
         setCategories(["All", ...categoryNames]);
 
-        /* ---------------- FETCH MENU ITEMS ---------------- */
         const menuRes = await fetch(`${apiUrl}/menu/items`);
         if (!menuRes.ok) throw new Error("Failed to fetch menu items");
         const menuData = await menuRes.json();
@@ -78,7 +68,6 @@ export default function MenuPage() {
 
   return (
     <div className="min-h-screen bg-stone-50 text-stone-900 pb-28">
-      {/* Header */}
       <header className="px-6 py-8 flex justify-between items-center">
         <div className="flex items-center gap-4">
           <Link
@@ -98,18 +87,17 @@ export default function MenuPage() {
           </div>
         </div>
 
-        <Link href="/customer/bill">
-        <button 
-          className="flex items-center gap-2 bg-orange-100/80 text-orange-700 px-4 py-3 rounded-2xl font-bold text-sm hover:bg-orange-200 transition-colors shadow-sm border border-orange-200/50 active:scale-95 shrink-0"
-        >
-          <ReceiptText size={18} />
-          <span className="hidden sm:inline">Get Bill</span>
-          <span className="sm:hidden">Bill</span>
-        </button>
+        <Link href={`/customer/getbill?table=${tableNumber}`}>
+          <button 
+            className="flex items-center gap-2 bg-orange-100/80 text-orange-700 px-4 py-3 rounded-2xl font-bold text-sm hover:bg-orange-200 transition-colors shadow-sm border border-orange-200/50 active:scale-95 shrink-0"
+          >
+            <ReceiptText size={18} />
+            <span className="hidden sm:inline">Get Bill</span>
+            <span className="sm:hidden">Bill</span>
+          </button>
         </Link>
       </header>
 
-      {/* Search Bar */}
       <div className="px-6 mb-8">
         <div className="relative">
           <Search
@@ -126,7 +114,6 @@ export default function MenuPage() {
         </div>
       </div>
 
-      {/* Categories */}
       <div className="flex gap-3 overflow-x-auto px-6 pb-6 no-scrollbar">
         {categories.map((cat) => (
           <button
@@ -143,7 +130,6 @@ export default function MenuPage() {
         ))}
       </div>
 
-      {/* Dish Grid */}
       <div className="px-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredDishes.length === 0 ? (
           <p className="text-center col-span-full text-stone-400 text-lg">
@@ -194,11 +180,10 @@ export default function MenuPage() {
         )}
       </div>
 
-      {/* Cart Button */}
       {isLoaded && cartCount > 0 && (
         <div className="fixed bottom-8 right-6 left-6 flex justify-center z-40">
           <Link
-            href="/customer/cart"
+            href={`/customer/cart?table=${tableNumber}`}
             className="flex items-center gap-4 bg-orange-600 hover:bg-orange-700 text-white px-8 py-4 rounded-3xl shadow-[0_8px_30px_rgb(234,88,12,0.3)] transition-all active:scale-95"
           >
             <div className="relative">
@@ -212,7 +197,6 @@ export default function MenuPage() {
         </div>
       )}
 
-      {/* Dish Modal */}
       {selectedDish && (
         <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-sm flex items-center justify-center p-6 z-50 transition-opacity">
           <div className="bg-white p-6 rounded-[2.5rem] max-w-md w-full shadow-2xl animate-in zoom-in-95 duration-200">
