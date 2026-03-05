@@ -9,11 +9,10 @@ import {
 import { useCart } from "../component/cartContext";
 
 export default function CartPage() {
-  const tableNumber = 12;
   const router = useRouter();
 
   const { 
-    cart, updateQuantity, updateNotes, clearCart, isLoaded, serveCount, placedServes, placeCurrentOrder 
+    cart, updateQuantity, updateNotes, clearCart, isLoaded, serveCount, placedServes, placeCurrentOrder, tableNumber, sessionId
   } = useCart();
 
   const [phoneNumber, setPhoneNumber] = useState("");
@@ -40,7 +39,17 @@ export default function CartPage() {
     if (isOrdering) return;
     setIsOrdering(true);
     
-    // Save snapshot of current items into a Serve
+    // Simulate backend payload for your new workflow:
+    const orderPayload = {
+      sessionId: sessionId,
+      tableNumber: tableNumber,
+      serveNumber: serveCount + 1,
+      items: cart,
+      total: grandTotal
+    };
+    console.log("-> Sending to DB:", orderPayload);
+
+    // Save snapshot of current items into a Serve context
     placeCurrentOrder(); 
 
     setShowPopup(true);
@@ -69,7 +78,7 @@ export default function CartPage() {
 
       <main className="flex-1 p-4 pb-48">
         
-        {/* Shows previous serves so the user doesn't think their food disappeared! */}
+        {/* Shows previous serves */}
         {placedServes.length > 0 && (
           <div className="bg-green-50 rounded-3xl p-4 shadow-sm border border-green-100 mb-5">
             <h2 className="text-xs font-bold text-green-700 uppercase tracking-widest mb-3 ml-1 flex items-center gap-1">

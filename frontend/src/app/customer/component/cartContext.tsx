@@ -21,15 +21,17 @@ export interface CartItem {
   notes?: string;
 }
 
-// New interface to store completed serves
 export interface PlacedServe {
   serveNumber: number;
   items: CartItem[];
   serveTotal: number;
+  sessionId: string; // Tied to the active session
 }
 
 interface CartContextType {
   cart: CartItem[];
+  sessionId: string | null; // Added session tracking
+  tableNumber: number;      // Added table tracking
   addToCart: (dish: Dish) => void;
   updateQuantity: (id: number, delta: number) => void;
   updateNotes: (id: number, text: string) => void;
@@ -37,8 +39,8 @@ interface CartContextType {
   cartCount: number;
   isLoaded: boolean;
   serveCount: number;
-  placedServes: PlacedServe[]; // Added this
-  placeCurrentOrder: () => void; // Replaced incrementServeCount with this
+  placedServes: PlacedServe[];
+  placeCurrentOrder: () => void;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
@@ -48,8 +50,27 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const [placedServes, setPlacedServes] = useState<PlacedServe[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
   const [serveCount, setServeCount] = useState(0);
+  
+  // Session State
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [tableNumber, setTableNumber] = useState<number>(12); // Mocking table 12 from QR code
 
   useEffect(() => {
+    // 1. Handle Session Initialization
+    let activeSession = localStorage.getItem("restaurant_sessionId");
+    
+    if (!activeSession) {
+      // Simulate backend session creation: System creates active session
+      // In a real app, you would fetch this from your DB/API here
+      activeSession = `sess_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+      localStorage.setItem("restaurant_sessionId", activeSession);
+      
+      // Simulate backend call: POST /api/sessions { table_number: 12, status: 'active' }
+      console.log(`[System] New Session Created: ${activeSession} for Table ${tableNumber}`);
+    }
+    setSessionId(activeSession);
+
+    // 2. Load Cart Data
     const savedCart = localStorage.getItem("restaurant_cart");
     if (savedCart) setCart(JSON.parse(savedCart));
 
@@ -60,7 +81,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     if (savedServes) setPlacedServes(JSON.parse(savedServes));
 
     setIsLoaded(true);
-  }, []);
+  }, [tableNumber]);
 
   useEffect(() => {
     if (isLoaded) {
@@ -69,9 +90,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
     }
   }, [cart, placedServes, isLoaded]);
 
-  // Moves the active cart into a new "Serve" block
   const placeCurrentOrder = () => {
-    if (cart.length === 0) return;
+    if (cart.length === 0 || !sessionId) return;
 
     const serveTotal = cart.reduce((acc, item) => acc + item.price * item.quantity, 0);
     const newServeNum = serveCount + 1;
@@ -80,13 +100,13 @@ export function CartProvider({ children }: { children: ReactNode }) {
       serveNumber: newServeNum,
       items: [...cart],
       serveTotal: serveTotal,
+      sessionId: sessionId, // Tie this order to the session
     };
 
     setPlacedServes((prev) => [...prev, newServe]);
     setServeCount(newServeNum);
     localStorage.setItem("restaurant_serveCount", newServeNum.toString());
 
-    // Clear active cart so they can start fresh for the next round
     setCart([]);
   };
 
@@ -128,14 +148,16 @@ export function CartProvider({ children }: { children: ReactNode }) {
     );
   };
 
-  // Completely resets everything (used after paying the bill)
   const clearCart = () => {
     setCart([]);
     setPlacedServes([]);
     setServeCount(0);
+    setSessionId(null); 
+    
     localStorage.removeItem("restaurant_cart");
     localStorage.removeItem("restaurant_serves");
     localStorage.removeItem("restaurant_serveCount");
+    localStorage.removeItem("restaurant_sessionId"); // Clear session on bill payment
   };
 
   const cartCount = cart.reduce((total, item) => total + item.quantity, 0);
@@ -144,6 +166,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
     <CartContext.Provider 
       value={{ 
         cart, 
+        sessionId,
+        tableNumber,
         addToCart, 
         updateQuantity, 
         updateNotes, 

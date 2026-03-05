@@ -9,13 +9,10 @@ import { useCart } from "../component/cartContext";
 export default function BillPage() {
   const router = useRouter();
   
-  // We pull placedServes instead of just cart
-  const { placedServes, clearCart, isLoaded } = useCart();
+  const { placedServes, clearCart, isLoaded, tableNumber, sessionId } = useCart();
   
   const [showPopup, setShowPopup] = useState(false);
   const [isRequesting, setIsRequesting] = useState(false);
-
-  const tableNumber = 12;
 
   if (!isLoaded) {
     return (
@@ -28,7 +25,6 @@ export default function BillPage() {
     );
   }
 
-  // Calculate final totals based on all placed serves
   const subtotal = placedServes.reduce((acc, serve) => acc + serve.serveTotal, 0);
   const gst = Math.round(subtotal * 0.05);
   const platformFee = 15;
@@ -37,10 +33,21 @@ export default function BillPage() {
   const handleGetBill = () => {
     if (isRequesting || placedServes.length === 0) return;
     setIsRequesting(true);
+
+    // Simulate backend payload to close session:
+    const closeSessionPayload = {
+      sessionId: sessionId,
+      tableNumber: tableNumber,
+      action: "generate_bill",
+      status: "billed", // Updating status per workflow
+      finalAmount: grandTotal
+    };
+    console.log("-> Closing Session:", closeSessionPayload);
+
     setShowPopup(true);
 
     setTimeout(() => {
-      clearCart(); // Wipes the context and localStorage totally clean
+      clearCart(); // Wipes context, localStorage, AND resets the sessionId
       router.push("/");
     }, 4000); 
   };
@@ -81,7 +88,7 @@ export default function BillPage() {
               <div className="text-center mb-6 pb-6 border-b border-dashed border-stone-200">
                 <UtensilsCrossed className="mx-auto text-orange-600 mb-2" size={28} />
                 <h2 className="text-xl font-black text-stone-900">Order Summary</h2>
-                <p className="text-sm text-stone-400 font-medium mt-1">Review your orders</p>
+                <p className="text-sm text-stone-400 font-medium mt-1">Session ID: {sessionId?.substring(0, 8)}...</p>
               </div>
 
               {/* Items List Grouped by Serve */}

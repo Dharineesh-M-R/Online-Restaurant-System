@@ -8,13 +8,13 @@ import {
   Plus, 
   Info, 
   Home, 
-  ReceiptText // Added this icon for the bill button
+  ReceiptText 
 } from "lucide-react";
 import Link from "next/link";
 import { useCart, Dish } from "../component/cartContext";
 
 export default function MenuPage() {
-  const { addToCart, cartCount, isLoaded } = useCart();
+  const { addToCart, cartCount, isLoaded, tableNumber } = useCart();
 
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
@@ -24,8 +24,6 @@ export default function MenuPage() {
   const [dishes, setDishes] = useState<Dish[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  const tableNumber = 12;
 
   useEffect(() => {
     const fetchMenuData = async () => {
@@ -81,7 +79,6 @@ export default function MenuPage() {
   return (
     <div className="min-h-screen bg-stone-50 text-stone-900 pb-28">
       {/* Header */}
-      {/* Changed items-end to items-center for better vertical alignment with the button */}
       <header className="px-6 py-8 flex justify-between items-center">
         <div className="flex items-center gap-4">
           <Link
@@ -101,11 +98,8 @@ export default function MenuPage() {
           </div>
         </div>
 
-        {/* Get Bill Button Added Here */}
-        {/* If you have a bill page route, you can change this <button> to a <Link href="/customer/bill"> */}
-        <Link href="/customer/getbill">
+        <Link href="/customer/bill">
         <button 
-          onClick={() => console.log("Get Bill Clicked!")}
           className="flex items-center gap-2 bg-orange-100/80 text-orange-700 px-4 py-3 rounded-2xl font-bold text-sm hover:bg-orange-200 transition-colors shadow-sm border border-orange-200/50 active:scale-95 shrink-0"
         >
           <ReceiptText size={18} />
