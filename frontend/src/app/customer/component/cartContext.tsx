@@ -2,7 +2,6 @@
 
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 
-// Shared interfaces
 export interface Dish {
   id: number;
   name: string;
@@ -22,6 +21,13 @@ export interface CartItem {
   notes?: string;
 }
 
+// New interface to store completed serves
+export interface PlacedServe {
+  serveNumber: number;
+  items: CartItem[];
+  serveTotal: number;
+}
+
 interface CartContextType {
   cart: CartItem[];
   addToCart: (dish: Dish) => void;
@@ -29,34 +35,60 @@ interface CartContextType {
   updateNotes: (id: number, text: string) => void;
   clearCart: () => void;
   cartCount: number;
-  isLoaded: boolean; // Added to prevent hydration mismatch
+  isLoaded: boolean;
+  serveCount: number;
+  placedServes: PlacedServe[]; // Added this
+  placeCurrentOrder: () => void; // Replaced incrementServeCount with this
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
 export function CartProvider({ children }: { children: ReactNode }) {
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [placedServes, setPlacedServes] = useState<PlacedServe[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [serveCount, setServeCount] = useState(0);
 
-  // 1. Load from local storage on mount
   useEffect(() => {
     const savedCart = localStorage.getItem("restaurant_cart");
-    if (savedCart) {
-      try {
-        setCart(JSON.parse(savedCart));
-      } catch (error) {
-        console.error("Failed to parse cart from local storage", error);
-      }
-    }
+    if (savedCart) setCart(JSON.parse(savedCart));
+
+    const savedServeCount = localStorage.getItem("restaurant_serveCount");
+    if (savedServeCount) setServeCount(parseInt(savedServeCount, 10));
+
+    const savedServes = localStorage.getItem("restaurant_serves");
+    if (savedServes) setPlacedServes(JSON.parse(savedServes));
+
     setIsLoaded(true);
   }, []);
 
-  // 2. Save to local storage whenever cart changes
   useEffect(() => {
     if (isLoaded) {
       localStorage.setItem("restaurant_cart", JSON.stringify(cart));
+      localStorage.setItem("restaurant_serves", JSON.stringify(placedServes));
     }
-  }, [cart, isLoaded]);
+  }, [cart, placedServes, isLoaded]);
+
+  // Moves the active cart into a new "Serve" block
+  const placeCurrentOrder = () => {
+    if (cart.length === 0) return;
+
+    const serveTotal = cart.reduce((acc, item) => acc + item.price * item.quantity, 0);
+    const newServeNum = serveCount + 1;
+
+    const newServe: PlacedServe = {
+      serveNumber: newServeNum,
+      items: [...cart],
+      serveTotal: serveTotal,
+    };
+
+    setPlacedServes((prev) => [...prev, newServe]);
+    setServeCount(newServeNum);
+    localStorage.setItem("restaurant_serveCount", newServeNum.toString());
+
+    // Clear active cart so they can start fresh for the next round
+    setCart([]);
+  };
 
   const addToCart = (dish: Dish) => {
     setCart((prevCart) => {
@@ -96,12 +128,33 @@ export function CartProvider({ children }: { children: ReactNode }) {
     );
   };
 
-  const clearCart = () => setCart([]);
+  // Completely resets everything (used after paying the bill)
+  const clearCart = () => {
+    setCart([]);
+    setPlacedServes([]);
+    setServeCount(0);
+    localStorage.removeItem("restaurant_cart");
+    localStorage.removeItem("restaurant_serves");
+    localStorage.removeItem("restaurant_serveCount");
+  };
 
   const cartCount = cart.reduce((total, item) => total + item.quantity, 0);
 
   return (
-    <CartContext.Provider value={{ cart, addToCart, updateQuantity, updateNotes, clearCart, cartCount, isLoaded }}>
+    <CartContext.Provider 
+      value={{ 
+        cart, 
+        addToCart, 
+        updateQuantity, 
+        updateNotes, 
+        clearCart, 
+        cartCount, 
+        isLoaded,
+        serveCount,
+        placedServes,
+        placeCurrentOrder
+      }}
+    >
       {children}
     </CartContext.Provider>
   );
