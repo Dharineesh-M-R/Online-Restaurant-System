@@ -67,7 +67,7 @@ export default function BillPage() {
               <Receipt className="text-stone-400" size={40} />
             </div>
             <h2 className="text-xl font-bold text-stone-900">No items ordered yet</h2>
-            <p className="text-sm text-stone-500 mt-2 max-w-[200px]">Place an order from the cart to generate a bill.</p>
+            <p className="text-sm text-stone-500 mt-2 max-w-50">Place an order from the cart to generate a bill.</p>
             <Link href="/customer/menu" className="mt-8">
               <button className="bg-stone-900 hover:bg-stone-800 transition-colors text-white py-3 px-10 rounded-full font-bold shadow-lg shadow-stone-300">
                 Back to Menu
@@ -76,7 +76,7 @@ export default function BillPage() {
           </div>
         ) : (
           <div className="max-w-md mx-auto">
-            <div className="bg-white rounded-[2rem] p-6 shadow-sm border border-stone-100 relative overflow-hidden">
+            <div className="bg-white rounded-4xl p-6 shadow-sm border border-stone-100 relative overflow-hidden">
               
               <div className="text-center mb-6 pb-6 border-b border-dashed border-stone-200">
                 <UtensilsCrossed className="mx-auto text-orange-600 mb-2" size={28} />

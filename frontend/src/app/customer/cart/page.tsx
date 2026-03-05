@@ -96,7 +96,7 @@ export default function CartPage() {
               <Utensils className="text-orange-300" size={40} />
             </div>
             <h2 className="text-xl font-bold text-gray-900">No new items</h2>
-            <p className="text-sm text-gray-500 mt-2 max-w-[200px]">Add more dishes to start your next round.</p>
+            <p className="text-sm text-gray-500 mt-2 max-w-50">Add more dishes to start your next round.</p>
             <Link href="/customer/menu" className="mt-8">
               <button className="bg-[#FF4F00] hover:bg-[#e64700] transition-colors text-white py-3 px-10 rounded-full font-bold shadow-lg shadow-orange-200">
                 Browse Menu
@@ -181,7 +181,7 @@ export default function CartPage() {
 
       {showPopup && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-6 transition-opacity duration-300">
-          <div className="bg-white rounded-[2rem] p-8 w-full max-w-sm text-center shadow-2xl animate-in zoom-in-95 duration-300">
+          <div className="bg-white rounded-4xl p-8 w-full max-w-sm text-center shadow-2xl animate-in zoom-in-95 duration-300">
             <div className="w-20 h-20 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-6">
               <CheckCircle2 className="text-green-500" size={40} />
             </div>

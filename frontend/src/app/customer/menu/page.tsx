@@ -161,7 +161,7 @@ export default function MenuPage() {
               key={dish.id}
               className="bg-white rounded-[2.5rem] p-3 shadow-sm border border-stone-100"
             >
-              <div className="relative rounded-[2rem] overflow-hidden mb-4 aspect-video">
+              <div className="relative rounded-4xl overflow-hidden mb-4 aspect-video">
                 <img
                   src={dish.image}
                   alt={dish.name}
