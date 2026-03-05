@@ -1,8 +1,7 @@
 "use client";
 
-import { createContext, useContext, useState, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 
-// Shared interfaces
 export interface Dish {
   id: number;
   name: string;
@@ -10,7 +9,7 @@ export interface Dish {
   category: string;
   description: string;
   image: string;
-  isVeg?: boolean; // Added so it translates to the cart well
+  isVeg?: boolean;
 }
 
 export interface CartItem {
@@ -22,6 +21,13 @@ export interface CartItem {
   notes?: string;
 }
 
+// New interface to store completed serves
+export interface PlacedServe {
+  serveNumber: number;
+  items: CartItem[];
+  serveTotal: number;
+}
+
 interface CartContextType {
   cart: CartItem[];
   addToCart: (dish: Dish) => void;
@@ -29,23 +35,69 @@ interface CartContextType {
   updateNotes: (id: number, text: string) => void;
   clearCart: () => void;
   cartCount: number;
+  isLoaded: boolean;
+  serveCount: number;
+  placedServes: PlacedServe[]; // Added this
+  placeCurrentOrder: () => void; // Replaced incrementServeCount with this
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
 export function CartProvider({ children }: { children: ReactNode }) {
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [placedServes, setPlacedServes] = useState<PlacedServe[]>([]);
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [serveCount, setServeCount] = useState(0);
+
+  useEffect(() => {
+    const savedCart = localStorage.getItem("restaurant_cart");
+    if (savedCart) setCart(JSON.parse(savedCart));
+
+    const savedServeCount = localStorage.getItem("restaurant_serveCount");
+    if (savedServeCount) setServeCount(parseInt(savedServeCount, 10));
+
+    const savedServes = localStorage.getItem("restaurant_serves");
+    if (savedServes) setPlacedServes(JSON.parse(savedServes));
+
+    setIsLoaded(true);
+  }, []);
+
+  useEffect(() => {
+    if (isLoaded) {
+      localStorage.setItem("restaurant_cart", JSON.stringify(cart));
+      localStorage.setItem("restaurant_serves", JSON.stringify(placedServes));
+    }
+  }, [cart, placedServes, isLoaded]);
+
+  // Moves the active cart into a new "Serve" block
+  const placeCurrentOrder = () => {
+    if (cart.length === 0) return;
+
+    const serveTotal = cart.reduce((acc, item) => acc + item.price * item.quantity, 0);
+    const newServeNum = serveCount + 1;
+
+    const newServe: PlacedServe = {
+      serveNumber: newServeNum,
+      items: [...cart],
+      serveTotal: serveTotal,
+    };
+
+    setPlacedServes((prev) => [...prev, newServe]);
+    setServeCount(newServeNum);
+    localStorage.setItem("restaurant_serveCount", newServeNum.toString());
+
+    // Clear active cart so they can start fresh for the next round
+    setCart([]);
+  };
 
   const addToCart = (dish: Dish) => {
     setCart((prevCart) => {
       const existingItem = prevCart.find((item) => item.id === dish.id);
       if (existingItem) {
-        // If it's already in the cart, just increase the quantity
         return prevCart.map((item) =>
           item.id === dish.id ? { ...item, quantity: item.quantity + 1 } : item
         );
       }
-      // If it's a new item, add it to the array
       return [
         ...prevCart,
         {
@@ -53,7 +105,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
           name: dish.name,
           price: dish.price,
           quantity: 1,
-          isVeg: dish.isVeg ?? true, // Default to true if not specified
+          isVeg: dish.isVeg ?? true,
           notes: "",
         },
       ];
@@ -76,19 +128,38 @@ export function CartProvider({ children }: { children: ReactNode }) {
     );
   };
 
-  const clearCart = () => setCart([]);
+  // Completely resets everything (used after paying the bill)
+  const clearCart = () => {
+    setCart([]);
+    setPlacedServes([]);
+    setServeCount(0);
+    localStorage.removeItem("restaurant_cart");
+    localStorage.removeItem("restaurant_serves");
+    localStorage.removeItem("restaurant_serveCount");
+  };
 
-  // Calculate total items for the notification bubble
   const cartCount = cart.reduce((total, item) => total + item.quantity, 0);
 
   return (
-    <CartContext.Provider value={{ cart, addToCart, updateQuantity, updateNotes, clearCart, cartCount }}>
+    <CartContext.Provider 
+      value={{ 
+        cart, 
+        addToCart, 
+        updateQuantity, 
+        updateNotes, 
+        clearCart, 
+        cartCount, 
+        isLoaded,
+        serveCount,
+        placedServes,
+        placeCurrentOrder
+      }}
+    >
       {children}
     </CartContext.Provider>
   );
 }
 
-// Custom hook to easily use the cart anywhere
 export function useCart() {
   const context = useContext(CartContext);
   if (context === undefined) {
