@@ -1,7 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Search, ShoppingBag, X, Plus, Info, Home } from "lucide-react";
+import { 
+  Search, 
+  ShoppingBag, 
+  X, 
+  Plus, 
+  Info, 
+  Home, 
+  ReceiptText // Added this icon for the bill button
+} from "lucide-react";
 import Link from "next/link";
 import { useCart, Dish } from "../component/cartContext";
 
@@ -15,14 +23,13 @@ export default function MenuPage() {
   const [categories, setCategories] = useState<string[]>(["All"]);
   const [dishes, setDishes] = useState<Dish[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null); // Added error state
+  const [error, setError] = useState<string | null>(null);
 
   const tableNumber = 12;
 
   useEffect(() => {
     const fetchMenuData = async () => {
       try {
-        // Use environment variable for API URL, fallback to localhost
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
         /* ---------------- FETCH CATEGORIES ---------------- */
@@ -40,7 +47,7 @@ export default function MenuPage() {
 
       } catch (error) {
         console.error("Error fetching menu:", error);
-        setError("Failed to load the menu. Please try again later."); // Set error message
+        setError("Failed to load the menu. Please try again later.");
       } finally {
         setLoading(false);
       }
@@ -63,7 +70,6 @@ export default function MenuPage() {
     );
   }
 
-  // Handle error state gracefully
   if (error) {
     return (
       <div className="min-h-screen flex items-center justify-center text-red-600 font-bold p-6 text-center bg-stone-50">
@@ -75,11 +81,12 @@ export default function MenuPage() {
   return (
     <div className="min-h-screen bg-stone-50 text-stone-900 pb-28">
       {/* Header */}
-      <header className="px-6 py-8 flex justify-between items-end">
+      {/* Changed items-end to items-center for better vertical alignment with the button */}
+      <header className="px-6 py-8 flex justify-between items-center">
         <div className="flex items-center gap-4">
           <Link
             href="/"
-            className="bg-white p-3 rounded-2xl shadow-sm border border-stone-100 hover:bg-orange-600 hover:text-white transition-all"
+            className="bg-white p-3 rounded-2xl shadow-sm border border-stone-100 hover:bg-orange-600 hover:text-white transition-all shrink-0"
           >
             <Home size={20} />
           </Link>
@@ -88,11 +95,24 @@ export default function MenuPage() {
             <h1 className="text-3xl font-black tracking-tight text-stone-900">
               Our Menu
             </h1>
-            <p className="text-stone-500 font-medium">
-              Table No: <span className="text-orange-600">{tableNumber}</span>
+            <p className="text-stone-500 font-medium text-sm">
+              Table: <span className="text-orange-600 font-bold">{tableNumber}</span>
             </p>
           </div>
         </div>
+
+        {/* Get Bill Button Added Here */}
+        {/* If you have a bill page route, you can change this <button> to a <Link href="/customer/bill"> */}
+        <Link href="/customer/getbill">
+        <button 
+          onClick={() => console.log("Get Bill Clicked!")}
+          className="flex items-center gap-2 bg-orange-100/80 text-orange-700 px-4 py-3 rounded-2xl font-bold text-sm hover:bg-orange-200 transition-colors shadow-sm border border-orange-200/50 active:scale-95 shrink-0"
+        >
+          <ReceiptText size={18} />
+          <span className="hidden sm:inline">Get Bill</span>
+          <span className="sm:hidden">Bill</span>
+        </button>
+        </Link>
       </header>
 
       {/* Search Bar */}
@@ -147,31 +167,31 @@ export default function MenuPage() {
                   alt={dish.name}
                   className="w-full h-full object-cover"
                 />
-                <div className="absolute top-4 left-4 bg-white px-3 py-1 rounded-full text-xs font-bold">
+                <div className="absolute top-4 left-4 bg-white px-3 py-1 rounded-full text-xs font-bold shadow-sm">
                   {dish.category}
                 </div>
               </div>
 
               <div className="px-2 pb-2">
-                <div className="flex justify-between">
-                  <h3 className="text-lg font-bold">{dish.name}</h3>
-                  <p className="text-orange-600 font-bold">₹{dish.price}</p>
+                <div className="flex justify-between items-start gap-2">
+                  <h3 className="text-lg font-bold leading-tight">{dish.name}</h3>
+                  <p className="text-orange-600 font-black">₹{dish.price}</p>
                 </div>
 
-                <div className="flex justify-between mt-6">
+                <div className="flex justify-between items-center mt-6">
                   <button
                     onClick={() => setSelectedDish(dish)}
-                    className="flex items-center gap-1 text-xs text-stone-500"
+                    className="flex items-center gap-1.5 text-xs font-bold text-stone-400 hover:text-stone-700 transition-colors"
                   >
-                    <Info size={14} />
+                    <Info size={16} />
                     Details
                   </button>
 
                   <button
                     onClick={() => addToCart(dish)}
-                    className="bg-stone-900 text-white p-3 rounded-xl hover:bg-orange-600"
+                    className="bg-stone-900 text-white p-3 rounded-2xl hover:bg-orange-600 hover:shadow-lg transition-all active:scale-90"
                   >
-                    <Plus size={18} />
+                    <Plus size={18} strokeWidth={3} />
                   </button>
                 </div>
               </div>
@@ -180,39 +200,55 @@ export default function MenuPage() {
         )}
       </div>
 
-      {/* Cart Button - Now safely wrapped with isLoaded check */}
+      {/* Cart Button */}
       {isLoaded && cartCount > 0 && (
         <div className="fixed bottom-8 right-6 left-6 flex justify-center z-40">
           <Link
             href="/customer/cart"
-            className="flex items-center gap-4 bg-orange-600 text-white px-8 py-4 rounded-2xl shadow-xl"
+            className="flex items-center gap-4 bg-orange-600 hover:bg-orange-700 text-white px-8 py-4 rounded-3xl shadow-[0_8px_30px_rgb(234,88,12,0.3)] transition-all active:scale-95"
           >
-            <ShoppingBag size={22} />
-            <span className="font-bold text-lg">View Order ({cartCount})</span>
+            <div className="relative">
+              <ShoppingBag size={22} />
+              <span className="absolute -top-2 -right-2 bg-white text-orange-600 text-[10px] font-black w-4 h-4 rounded-full flex items-center justify-center">
+                {cartCount}
+              </span>
+            </div>
+            <span className="font-bold text-lg">View Order</span>
           </Link>
         </div>
       )}
 
       {/* Dish Modal */}
       {selectedDish && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-6 z-50">
-          <div className="bg-white p-8 rounded-3xl max-w-md w-full">
-            <div className="flex justify-between">
-              <h2 className="text-2xl font-bold">{selectedDish.name}</h2>
-              <button onClick={() => setSelectedDish(null)}>
-                <X size={24} />
+        <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-sm flex items-center justify-center p-6 z-50 transition-opacity">
+          <div className="bg-white p-6 rounded-[2.5rem] max-w-md w-full shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-start mb-4">
+              <div>
+                <h2 className="text-2xl font-black text-stone-900 leading-tight mb-1">
+                  {selectedDish.name}
+                </h2>
+                <p className="text-orange-600 font-black text-xl">
+                  ₹{selectedDish.price}
+                </p>
+              </div>
+              <button 
+                onClick={() => setSelectedDish(null)}
+                className="bg-stone-100 p-2 rounded-full text-stone-500 hover:bg-stone-200 hover:text-stone-900 transition-colors"
+              >
+                <X size={20} />
               </button>
             </div>
-            <p className="text-orange-600 font-bold text-xl mt-2">
-              ₹{selectedDish.price}
+            
+            <p className="text-stone-500 font-medium text-sm leading-relaxed mb-8">
+              {selectedDish.description}
             </p>
-            <p className="text-stone-500 mt-4">{selectedDish.description}</p>
+            
             <button
               onClick={() => {
                 addToCart(selectedDish);
                 setSelectedDish(null);
               }}
-              className="w-full mt-6 bg-stone-900 text-white py-4 rounded-2xl font-bold"
+              className="w-full bg-stone-900 hover:bg-orange-600 text-white py-4 rounded-2xl font-bold text-lg transition-colors shadow-lg active:scale-[0.98]"
             >
               Add to My Order
             </button>
