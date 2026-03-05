@@ -211,7 +211,7 @@ export default function BillPage() {
               <div className="bg-green-500 h-full animate-[progress_4s_ease-in-out_forwards] w-full origin-left" />
             </div>
             <p className="text-[10px] text-stone-400 font-bold uppercase tracking-wider mt-4">
-              Redirecting to menu...
+              Redirecting to home...
             </p>
           </div>
         </div>
