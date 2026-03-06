@@ -254,5 +254,34 @@ router.post("/:sessionId/orders", async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 });
+// 5. Close Session / Request Bill
+router.post("/:sessionId/bill", async (req, res) => {
+  const { sessionId } = req.params;
 
+  try {
+    // A. Mark the table session as 'billed' (so it no longer pulls as 'active')
+    const { error: sessionErr } = await supabase
+      .from("table_sessions")
+      .update({ status: "billed" })
+      .eq("session_id", sessionId);
+
+    if (sessionErr) throw sessionErr;
+
+    // B. Mark the master order as 'completed'
+    const { error: orderErr } = await supabase
+      .from("orders")
+      .update({ order_status: "completed" })
+      .eq("session_id", sessionId)
+      .neq("order_status", "completed");
+
+    if (orderErr) throw orderErr;
+
+    console.log(`[Billing] Session ${sessionId} successfully closed.`);
+    res.json({ success: true, message: "Bill generated and session closed." });
+
+  } catch (err) {
+    console.error("Billing Error:", err);
+    res.status(500).json({ error: "Failed to close session" });
+  }
+});
 export default router;

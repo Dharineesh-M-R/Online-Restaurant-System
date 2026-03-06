@@ -2,8 +2,13 @@
 
 import Link from "next/link";
 import { motion } from "framer-motion";
+// Corrected import path based on your folder structure!
+import { useCart } from "./customer/component/cartContext"; 
 
 export default function HomePage() {
+  // Pull the table number from our global context
+  const { tableNumber } = useCart();
+
   return (
     <div className="min-h-screen bg-gray-50 text-gray-800">
 
@@ -26,13 +31,14 @@ export default function HomePage() {
           </p>
 
           <div className="flex flex-col sm:flex-row justify-center gap-4 sm:gap-6">
-            <Link href="/customer/menu" className="w-full sm:w-auto">
+            {/* Table number dynamically injected into the URL */}
+            <Link href={`/customer/menu?table=${tableNumber}`} className="w-full sm:w-auto">
               <button className="w-full sm:w-auto min-h-[48px] bg-white text-orange-600 px-6 py-3 rounded-xl font-semibold shadow-md active:scale-95 transition">
                 View Menu
               </button>
             </Link>
 
-            <Link href="/customer/cart" className="w-full sm:w-auto">
+            <Link href={`/customer/cart?table=${tableNumber}`} className="w-full sm:w-auto">
               <button className="w-full sm:w-auto min-h-[48px] bg-black text-white px-6 py-3 rounded-xl font-semibold shadow-md active:scale-95 transition">
                 View Cart
               </button>
@@ -40,7 +46,6 @@ export default function HomePage() {
           </div>
         </div>
       </section>
-
 
       {/* About Section */}
       <section className="py-12 sm:py-16 px-4 sm:px-6">
@@ -73,7 +78,6 @@ export default function HomePage() {
 
         </div>
       </section>
-
 
       {/* Outlets Section */}
       <section className="bg-white py-12 sm:py-16 px-4 sm:px-6">
@@ -115,7 +119,6 @@ export default function HomePage() {
           </div>
         </div>
       </section>
-
 
       {/* Footer */}
       <footer className="bg-gray-900 text-white py-5 text-center text-sm sm:text-base">

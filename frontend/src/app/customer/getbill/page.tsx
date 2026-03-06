@@ -14,6 +14,9 @@ export default function BillPage() {
   const [showPopup, setShowPopup] = useState(false);
   const [isRequesting, setIsRequesting] = useState(false);
 
+  // Grab the API URL for the fetch call
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://172.18.170.244:5000";
+
   if (!isLoaded) {
     return (
       <div className="min-h-screen bg-stone-50 flex items-center justify-center">
@@ -30,20 +33,35 @@ export default function BillPage() {
   const platformFee = 15;
   const grandTotal = subtotal > 0 ? subtotal + gst + platformFee : 0;
 
-  const handleGetBill = () => {
-    if (isRequesting || placedServes.length === 0) return;
+  // UPDATED FUNCTION: Now hits the backend to close the session
+  const handleGetBill = async () => {
+    if (isRequesting || placedServes.length === 0 || !sessionId) return;
     setIsRequesting(true);
     
-    console.log("-> Closing Session:", { sessionId, tableNumber, finalAmount: grandTotal });
+    try {
+      // 1. Tell the backend to close this table's session
+      const res = await fetch(`${apiUrl}/sessions/${sessionId}/bill`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" }
+      });
 
-    setShowPopup(true);
+      if (!res.ok) throw new Error("Failed to close session on backend");
 
-    setTimeout(() => {
-      clearCart(); 
-      // Removed the curly braces here
-      router.push(`/?table=${tableNumber}`); 
-    }, 4000); 
-};
+      // 2. Show the success popup
+      setShowPopup(true);
+
+      // 3. Clear local frontend data and redirect
+      setTimeout(() => {
+        clearCart(); 
+        router.push(`/?table=${tableNumber}`);
+      }, 4000); 
+
+    } catch (err) {
+      console.error("Error requesting bill:", err);
+      setIsRequesting(false); // Let them try again if it fails
+      alert("Failed to request bill. Please check your connection.");
+    }
+  };
 
   return (
     <div className="min-h-screen bg-stone-50 text-stone-900 flex flex-col font-sans relative">
