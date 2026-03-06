@@ -1,12 +1,22 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Search, ShoppingBag, X, Plus, Info, Home, ReceiptText } from "lucide-react";
+import { 
+  Search, 
+  ShoppingBag, 
+  X, 
+  Plus, 
+  Minus, // <-- Added Minus icon
+  Info, 
+  Home, 
+  ReceiptText 
+} from "lucide-react";
 import Link from "next/link";
 import { useCart, Dish } from "../component/cartContext";
 
 export default function MenuPage() {
-  const { addToCart, cartCount, isLoaded, tableNumber } = useCart(); // Removed refreshTableOrders
+  // Added `cart` and `updateQuantity` to the destructured context
+  const { cart, addToCart, updateQuantity, cartCount, isLoaded, tableNumber } = useCart(); 
 
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
@@ -49,6 +59,12 @@ export default function MenuPage() {
     const matchesCategory = selectedCategory === "All" || dish.category === selectedCategory;
     return matchesSearch && matchesCategory;
   });
+
+  // Helper function to find how many of a specific dish are in the unplaced cart
+  const getDishQuantity = (dishId: number) => {
+    const cartItem = cart.find(item => item.id === dishId);
+    return cartItem ? cartItem.quantity : 0;
+  };
 
   if (loading) {
     return (
@@ -136,47 +152,72 @@ export default function MenuPage() {
             No dishes found
           </p>
         ) : (
-          filteredDishes.map((dish) => (
-            <div
-              key={dish.id}
-              className="bg-white rounded-[2.5rem] p-3 shadow-sm border border-stone-100"
-            >
-              <div className="relative rounded-4xl overflow-hidden mb-4 aspect-video">
-                <img
-                  src={dish.image}
-                  alt={dish.name}
-                  className="w-full h-full object-cover"
-                />
-                <div className="absolute top-4 left-4 bg-white px-3 py-1 rounded-full text-xs font-bold shadow-sm">
-                  {dish.category}
+          filteredDishes.map((dish) => {
+            const quantity = getDishQuantity(dish.id); // Get current quantity
+            
+            return (
+              <div
+                key={dish.id}
+                className="bg-white rounded-[2.5rem] p-3 shadow-sm border border-stone-100"
+              >
+                <div className="relative rounded-4xl overflow-hidden mb-4 aspect-video">
+                  <img
+                    src={dish.image}
+                    alt={dish.name}
+                    className="w-full h-full object-cover"
+                  />
+                  <div className="absolute top-4 left-4 bg-white px-3 py-1 rounded-full text-xs font-bold shadow-sm">
+                    {dish.category}
+                  </div>
+                </div>
+
+                <div className="px-2 pb-2">
+                  <div className="flex justify-between items-start gap-2">
+                    <h3 className="text-lg font-bold leading-tight">{dish.name}</h3>
+                    <p className="text-orange-600 font-black">₹{dish.price}</p>
+                  </div>
+
+                  <div className="flex justify-between items-center mt-6 h-12">
+                    <button
+                      onClick={() => setSelectedDish(dish)}
+                      className="flex items-center gap-1.5 text-xs font-bold text-stone-400 hover:text-stone-700 transition-colors"
+                    >
+                      <Info size={16} />
+                      Details
+                    </button>
+
+                    {/* DYNAMIC QUANTITY CONTROLS */}
+                    {quantity === 0 ? (
+                      <button
+                        onClick={() => addToCart(dish)}
+                        className="bg-stone-900 text-white p-3 rounded-2xl hover:bg-orange-600 hover:shadow-lg transition-all active:scale-90"
+                      >
+                        <Plus size={18} strokeWidth={3} />
+                      </button>
+                    ) : (
+                      <div className="flex items-center bg-orange-600 text-white rounded-2xl p-1 shadow-md shadow-orange-200 animate-in fade-in zoom-in-95 duration-200">
+                        <button 
+                          onClick={() => updateQuantity(dish.id, -1)} 
+                          className="p-2 hover:bg-orange-700 rounded-xl transition-colors active:scale-90"
+                        >
+                          <Minus size={16} strokeWidth={3} />
+                        </button>
+                        <span className="w-6 text-center font-bold text-sm">
+                          {quantity}
+                        </span>
+                        <button 
+                          onClick={() => updateQuantity(dish.id, 1)} 
+                          className="p-2 hover:bg-orange-700 rounded-xl transition-colors active:scale-90"
+                        >
+                          <Plus size={16} strokeWidth={3} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
-
-              <div className="px-2 pb-2">
-                <div className="flex justify-between items-start gap-2">
-                  <h3 className="text-lg font-bold leading-tight">{dish.name}</h3>
-                  <p className="text-orange-600 font-black">₹{dish.price}</p>
-                </div>
-
-                <div className="flex justify-between items-center mt-6">
-                  <button
-                    onClick={() => setSelectedDish(dish)}
-                    className="flex items-center gap-1.5 text-xs font-bold text-stone-400 hover:text-stone-700 transition-colors"
-                  >
-                    <Info size={16} />
-                    Details
-                  </button>
-
-                  <button
-                    onClick={() => addToCart(dish)}
-                    className="bg-stone-900 text-white p-3 rounded-2xl hover:bg-orange-600 hover:shadow-lg transition-all active:scale-90"
-                  >
-                    <Plus size={18} strokeWidth={3} />
-                  </button>
-                </div>
-              </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
 
@@ -197,6 +238,7 @@ export default function MenuPage() {
         </div>
       )}
 
+      {/* Dish Modal */}
       {selectedDish && (
         <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-sm flex items-center justify-center p-6 z-50 transition-opacity">
           <div className="bg-white p-6 rounded-[2.5rem] max-w-md w-full shadow-2xl animate-in zoom-in-95 duration-200">
@@ -221,15 +263,36 @@ export default function MenuPage() {
               {selectedDish.description}
             </p>
             
-            <button
-              onClick={() => {
-                addToCart(selectedDish);
-                setSelectedDish(null);
-              }}
-              className="w-full bg-stone-900 hover:bg-orange-600 text-white py-4 rounded-2xl font-bold text-lg transition-colors shadow-lg active:scale-[0.98]"
-            >
-              Add to My Order
-            </button>
+            {/* MODAL QUANTITY CONTROLS */}
+            {getDishQuantity(selectedDish.id) === 0 ? (
+              <button
+                onClick={() => addToCart(selectedDish)}
+                className="w-full bg-stone-900 hover:bg-orange-600 text-white py-4 rounded-2xl font-bold text-lg transition-colors shadow-lg active:scale-[0.98]"
+              >
+                Add to My Order
+              </button>
+            ) : (
+              <div className="flex items-center justify-between bg-orange-50 rounded-2xl p-2 border border-orange-100">
+                <button 
+                  onClick={() => updateQuantity(selectedDish.id, -1)} 
+                  className="bg-white text-orange-600 p-3 rounded-xl shadow-sm hover:bg-orange-100 transition-colors active:scale-90"
+                >
+                  <Minus size={20} strokeWidth={3} />
+                </button>
+                <div className="flex flex-col items-center">
+                  <span className="text-xs font-bold text-orange-400 uppercase tracking-widest">Quantity</span>
+                  <span className="text-2xl font-black text-stone-900">
+                    {getDishQuantity(selectedDish.id)}
+                  </span>
+                </div>
+                <button 
+                  onClick={() => updateQuantity(selectedDish.id, 1)} 
+                  className="bg-orange-600 text-white p-3 rounded-xl shadow-md shadow-orange-200 hover:bg-orange-700 transition-colors active:scale-90"
+                >
+                  <Plus size={20} strokeWidth={3} />
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
