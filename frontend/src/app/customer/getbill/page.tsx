@@ -53,7 +53,7 @@ export default function BillPage() {
       // 3. Clear local frontend data and redirect
       setTimeout(() => {
         clearCart(); 
-        router.push(`/?table=${tableNumber}`);
+        router.push("/");
       }, 4000); 
 
     } catch (err) {
