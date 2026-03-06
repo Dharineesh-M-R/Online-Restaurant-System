@@ -13,7 +13,7 @@ export default function HomePage() {
     <div className="min-h-screen bg-gray-50 text-gray-800">
 
       {/* Hero Section */}
-      <section className="bg-gradient-to-r from-orange-500 to-red-500 text-white py-14 sm:py-20 px-4 sm:px-6">
+      <section className="bg-linear-to-r from-orange-500 to-red-500 text-white py-14 sm:py-20 px-4 sm:px-6">
         <div className="max-w-6xl mx-auto text-center">
 
           <motion.h1
@@ -33,13 +33,13 @@ export default function HomePage() {
           <div className="flex flex-col sm:flex-row justify-center gap-4 sm:gap-6">
             {/* Table number dynamically injected into the URL */}
             <Link href={`/customer/menu?table=${tableNumber}`} className="w-full sm:w-auto">
-              <button className="w-full sm:w-auto min-h-[48px] bg-white text-orange-600 px-6 py-3 rounded-xl font-semibold shadow-md active:scale-95 transition">
+              <button className="w-full sm:w-auto min-h-12 bg-white text-orange-600 px-6 py-3 rounded-xl font-semibold shadow-md active:scale-95 transition">
                 View Menu
               </button>
             </Link>
 
             <Link href={`/customer/cart?table=${tableNumber}`} className="w-full sm:w-auto">
-              <button className="w-full sm:w-auto min-h-[48px] bg-black text-white px-6 py-3 rounded-xl font-semibold shadow-md active:scale-95 transition">
+              <button className="w-full sm:w-auto min-h-12 bg-black text-white px-6 py-3 rounded-xl font-semibold shadow-md active:scale-95 transition">
                 View Cart
               </button>
             </Link>
