@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -18,6 +18,9 @@ export default function CartPage() {
   const [phoneNumber, setPhoneNumber] = useState("");
   const [showPopup, setShowPopup] = useState(false);
   const [isOrdering, setIsOrdering] = useState(false); 
+  
+  // Create a ref to store our timeout so we can cancel it if the user clicks a button
+  const redirectTimer = useRef<NodeJS.Timeout | null>(null);
 
   if (!isLoaded) {
     return (
@@ -49,12 +52,20 @@ export default function CartPage() {
     console.log("-> Sending to DB:", orderPayload);
 
     placeCurrentOrder(); 
-
     setShowPopup(true);
 
-    setTimeout(() => {
-      router.push(`/customer/menu?table=${tableNumber}`);
-    }, 2500);
+    // Auto-redirect to the Bill page after 5 seconds if no button is clicked
+    redirectTimer.current = setTimeout(() => {
+      router.push(`/customer/getbill?table=${tableNumber}`);
+    }, 5000);
+  };
+
+  // Handle manual button clicks inside the popup
+  const handlePopupAction = (path: string) => {
+    if (redirectTimer.current) {
+      clearTimeout(redirectTimer.current); // Cancel the 5-second auto-redirect
+    }
+    router.push(path);
   };
 
   return (
@@ -189,6 +200,7 @@ export default function CartPage() {
         </div>
       )}
 
+      {/* UPDATED POPUP */}
       {showPopup && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-6 transition-opacity duration-300">
           <div className="bg-white rounded-4xl p-8 w-full max-w-sm text-center shadow-2xl animate-in zoom-in-95 duration-300">
@@ -196,13 +208,36 @@ export default function CartPage() {
               <CheckCircle2 className="text-green-500" size={40} />
             </div>
             <h2 className="text-2xl font-bold text-gray-900 mb-2">Order Placed! 🎉</h2>
-            <p className="text-gray-500 mb-6">Your order has been sent to the kitchen. Redirecting you to the menu...</p>
-            <div className="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden">
-              <div className="bg-green-500 h-full animate-[progress_2.5s_ease-in-out] w-full origin-left" />
+            <p className="text-gray-500 mb-6">Your order has been sent to the kitchen.</p>
+            
+            <div className="flex flex-col gap-3 mb-6">
+              {/* Option 1: Continue Ordering */}
+              <button 
+                onClick={() => handlePopupAction(`/customer/menu?table=${tableNumber}`)}
+                className="w-full bg-orange-50 text-orange-600 font-bold py-3.5 rounded-xl border border-orange-100 hover:bg-orange-100 transition-colors"
+              >
+                Add More Serves
+              </button>
+              
+              {/* Option 2: Go to Bill */}
+              <button 
+                onClick={() => handlePopupAction(`/customer/getbill?table=${tableNumber}`)}
+                className="w-full bg-black text-white font-bold py-3.5 rounded-xl hover:bg-gray-800 transition-colors shadow-lg"
+              >
+                Get Bill
+              </button>
             </div>
+
+            {/* Visual timer bar now takes exactly 5 seconds (linear looks better for a countdown) */}
+            <div className="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden">
+              <div className="bg-green-500 h-full animate-[progress_5s_linear] w-full origin-left" />
+            </div>
+            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mt-3">Auto-redirecting to bill...</p>
           </div>
         </div>
       )}
+      
+      {/* Changed to 5s to match the JS timeout perfectly */}
       <style jsx global>{`@keyframes progress { 0% { transform: scaleX(0); } 100% { transform: scaleX(1); } }`}</style>
     </div>
   );
