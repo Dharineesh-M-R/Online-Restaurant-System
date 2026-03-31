@@ -4,7 +4,8 @@ import dotenv from "dotenv";
 
 import menuRoutes from "./routes/menu.js";
 import orderRoutes from "./routes/orders.js";
-import sessionRoutes from "./routes/sessions.js"; // <-- Add this import
+import sessionRoutes from "./routes/sessions.js";
+import billingRoutes from "./routes/billing.js"; // <-- Add this import
 
 dotenv.config();
 
@@ -22,6 +23,7 @@ app.get("/", (req, res) => {
 app.use("/menu", menuRoutes);
 app.use("/orders", orderRoutes);
 app.use("/sessions", sessionRoutes); // <-- Mount the new route
+app.use("/admin/billing", billingRoutes); // <-- Mount the new route
 
 const PORT = process.env.PORT || 5000;
 
