@@ -9,13 +9,13 @@ import { useCart } from "../component/cartContext";
 export default function BillPage() {
   const router = useRouter();
   
-  // We pull placedServes instead of just cart
-  const { placedServes, clearCart, isLoaded } = useCart();
+  const { placedServes, clearCart, isLoaded, tableNumber, sessionId } = useCart();
   
   const [showPopup, setShowPopup] = useState(false);
   const [isRequesting, setIsRequesting] = useState(false);
 
-  const tableNumber = 12;
+  // Grab the API URL for the fetch call
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://172.18.170.244:5000";
 
   if (!isLoaded) {
     return (
@@ -28,27 +28,45 @@ export default function BillPage() {
     );
   }
 
-  // Calculate final totals based on all placed serves
   const subtotal = placedServes.reduce((acc, serve) => acc + serve.serveTotal, 0);
   const gst = Math.round(subtotal * 0.05);
   const platformFee = 15;
   const grandTotal = subtotal > 0 ? subtotal + gst + platformFee : 0;
 
-  const handleGetBill = () => {
-    if (isRequesting || placedServes.length === 0) return;
+  // UPDATED FUNCTION: Now hits the backend to close the session
+  const handleGetBill = async () => {
+    if (isRequesting || placedServes.length === 0 || !sessionId) return;
     setIsRequesting(true);
-    setShowPopup(true);
+    
+    try {
+      // 1. Tell the backend to close this table's session
+      const res = await fetch(`${apiUrl}/sessions/${sessionId}/bill`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" }
+      });
 
-    setTimeout(() => {
-      clearCart(); // Wipes the context and localStorage totally clean
-      router.push("/");
-    }, 4000); 
+      if (!res.ok) throw new Error("Failed to close session on backend");
+
+      // 2. Show the success popup
+      setShowPopup(true);
+
+      // 3. Clear local frontend data and redirect
+      setTimeout(() => {
+        clearCart(); 
+        router.push("/");
+      }, 4000); 
+
+    } catch (err) {
+      console.error("Error requesting bill:", err);
+      setIsRequesting(false); // Let them try again if it fails
+      alert("Failed to request bill. Please check your connection.");
+    }
   };
 
   return (
     <div className="min-h-screen bg-stone-50 text-stone-900 flex flex-col font-sans relative">
       <header className="sticky top-0 z-20 bg-stone-50/80 backdrop-blur-md px-6 py-5 flex items-center justify-between border-b border-stone-200/50">
-        <Link href="/customer/menu" className="p-2 bg-white shadow-sm border border-stone-100 hover:bg-stone-100 rounded-full transition-all">
+        <Link href={`/customer/menu?table=${tableNumber}`} className="p-2 bg-white shadow-sm border border-stone-100 hover:bg-stone-100 rounded-full transition-all">
           <ArrowLeft size={20} className="text-stone-800" />
         </Link>
         <div className="flex flex-col items-center">
@@ -67,8 +85,8 @@ export default function BillPage() {
               <Receipt className="text-stone-400" size={40} />
             </div>
             <h2 className="text-xl font-bold text-stone-900">No items ordered yet</h2>
-            <p className="text-sm text-stone-500 mt-2 max-w-[200px]">Place an order from the cart to generate a bill.</p>
-            <Link href="/customer/menu" className="mt-8">
+            <p className="text-sm text-stone-500 mt-2 max-w-50">Place an order from the cart to generate a bill.</p>
+            <Link href={`/customer/menu?table=${tableNumber}`} className="mt-8">
               <button className="bg-stone-900 hover:bg-stone-800 transition-colors text-white py-3 px-10 rounded-full font-bold shadow-lg shadow-stone-300">
                 Back to Menu
               </button>
@@ -76,7 +94,7 @@ export default function BillPage() {
           </div>
         ) : (
           <div className="max-w-md mx-auto">
-            <div className="bg-white rounded-[2rem] p-6 shadow-sm border border-stone-100 relative overflow-hidden">
+            <div className="bg-white rounded-4xl p-6 shadow-sm border border-stone-100 relative overflow-hidden">
               
               <div className="text-center mb-6 pb-6 border-b border-dashed border-stone-200">
                 <UtensilsCrossed className="mx-auto text-orange-600 mb-2" size={28} />
@@ -84,7 +102,6 @@ export default function BillPage() {
                 <p className="text-sm text-stone-400 font-medium mt-1">Review your orders</p>
               </div>
 
-              {/* Items List Grouped by Serve */}
               <div className="mb-6 pb-6 border-b border-dashed border-stone-200">
                 {placedServes.map((serve) => (
                   <div key={serve.serveNumber} className="mb-6 last:mb-0">
@@ -112,7 +129,6 @@ export default function BillPage() {
                 ))}
               </div>
 
-              {/* Totals */}
               <div className="space-y-3">
                 <div className="flex justify-between text-sm text-stone-500 font-medium">
                   <span>Subtotal</span><span>₹{subtotal}</span>

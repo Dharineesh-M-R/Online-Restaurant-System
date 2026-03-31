@@ -6,15 +6,16 @@ import {
   ShoppingBag, 
   X, 
   Plus, 
+  Minus, 
   Info, 
   Home, 
-  ReceiptText // Added this icon for the bill button
+  ReceiptText 
 } from "lucide-react";
 import Link from "next/link";
 import { useCart, Dish } from "../component/cartContext";
 
 export default function MenuPage() {
-  const { addToCart, cartCount, isLoaded } = useCart();
+  const { cart, addToCart, updateQuantity, cartCount, isLoaded, tableNumber } = useCart(); 
 
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
@@ -25,21 +26,17 @@ export default function MenuPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const tableNumber = 12;
-
   useEffect(() => {
     const fetchMenuData = async () => {
       try {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://172.18.170.244:5000";
 
-        /* ---------------- FETCH CATEGORIES ---------------- */
         const categoryRes = await fetch(`${apiUrl}/menu/categories`);
         if (!categoryRes.ok) throw new Error("Failed to fetch categories");
         const categoryData = await categoryRes.json();
         const categoryNames = categoryData.categories.map((c: any) => c.name);
         setCategories(["All", ...categoryNames]);
 
-        /* ---------------- FETCH MENU ITEMS ---------------- */
         const menuRes = await fetch(`${apiUrl}/menu/items`);
         if (!menuRes.ok) throw new Error("Failed to fetch menu items");
         const menuData = await menuRes.json();
@@ -62,6 +59,11 @@ export default function MenuPage() {
     return matchesSearch && matchesCategory;
   });
 
+  const getDishQuantity = (dishId: number) => {
+    const cartItem = cart.find(item => item.id === dishId);
+    return cartItem ? cartItem.quantity : 0;
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center text-xl font-bold bg-stone-50 text-stone-900">
@@ -80,67 +82,60 @@ export default function MenuPage() {
 
   return (
     <div className="min-h-screen bg-stone-50 text-stone-900 pb-28">
-      {/* Header */}
-      {/* Changed items-end to items-center for better vertical alignment with the button */}
-      <header className="px-6 py-8 flex justify-between items-center">
-        <div className="flex items-center gap-4">
+      <header className="px-4 py-6 flex justify-between items-center">
+        <div className="flex items-center gap-3">
           <Link
             href="/"
-            className="bg-white p-3 rounded-2xl shadow-sm border border-stone-100 hover:bg-orange-600 hover:text-white transition-all shrink-0"
+            className="bg-white p-2.5 rounded-2xl shadow-sm border border-stone-100 hover:bg-orange-600 hover:text-white transition-all shrink-0"
           >
             <Home size={20} />
           </Link>
 
           <div>
-            <h1 className="text-3xl font-black tracking-tight text-stone-900">
+            <h1 className="text-2xl font-black tracking-tight text-stone-900 leading-none">
               Our Menu
             </h1>
-            <p className="text-stone-500 font-medium text-sm">
+            <p className="text-stone-500 font-medium text-xs mt-1">
               Table: <span className="text-orange-600 font-bold">{tableNumber}</span>
             </p>
           </div>
         </div>
 
-        {/* Get Bill Button Added Here */}
-        {/* If you have a bill page route, you can change this <button> to a <Link href="/customer/bill"> */}
-        <Link href="/customer/getbill">
-        <button 
-          onClick={() => console.log("Get Bill Clicked!")}
-          className="flex items-center gap-2 bg-orange-100/80 text-orange-700 px-4 py-3 rounded-2xl font-bold text-sm hover:bg-orange-200 transition-colors shadow-sm border border-orange-200/50 active:scale-95 shrink-0"
-        >
-          <ReceiptText size={18} />
-          <span className="hidden sm:inline">Get Bill</span>
-          <span className="sm:hidden">Bill</span>
-        </button>
+        <Link href={`/customer/getbill?table=${tableNumber}`}>
+          <button 
+            className="flex items-center gap-1.5 bg-orange-100/80 text-orange-700 px-3 py-2.5 rounded-xl font-bold text-xs hover:bg-orange-200 transition-colors shadow-sm border border-orange-200/50 active:scale-95 shrink-0"
+          >
+            <ReceiptText size={16} />
+            <span className="hidden sm:inline">Get Bill</span>
+            <span className="sm:hidden">Bill</span>
+          </button>
         </Link>
       </header>
 
-      {/* Search Bar */}
-      <div className="px-6 mb-8">
+      <div className="px-4 mb-6">
         <div className="relative">
           <Search
             className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400"
-            size={20}
+            size={18}
           />
           <input
             type="text"
             placeholder="Search for something tasty..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-12 pr-4 py-4 rounded-2xl bg-white border-2 border-transparent shadow-sm focus:border-orange-500 focus:outline-none"
+            className="w-full pl-11 pr-4 py-3.5 rounded-2xl bg-white border-2 border-transparent shadow-sm focus:border-orange-500 focus:outline-none text-sm"
           />
         </div>
       </div>
 
-      {/* Categories */}
-      <div className="flex gap-3 overflow-x-auto px-6 pb-6 no-scrollbar">
+      <div className="flex gap-2 overflow-x-auto px-4 pb-4 no-scrollbar">
         {categories.map((cat) => (
           <button
             key={cat}
             onClick={() => setSelectedCategory(cat)}
-            className={`px-6 py-2.5 rounded-full font-bold whitespace-nowrap transition-all ${
+            className={`px-5 py-2 rounded-full font-bold text-sm whitespace-nowrap transition-all ${
               selectedCategory === cat
-                ? "bg-stone-900 text-white shadow-lg"
+                ? "bg-stone-900 text-white shadow-md"
                 : "bg-white text-stone-500 border border-stone-200"
             }`}
           >
@@ -149,76 +144,111 @@ export default function MenuPage() {
         ))}
       </div>
 
-      {/* Dish Grid */}
-      <div className="px-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+      {/* CHANGED: grid-cols-2 for mobile to match reference image */}
+      <div className="px-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
         {filteredDishes.length === 0 ? (
-          <p className="text-center col-span-full text-stone-400 text-lg">
+          <p className="text-center col-span-full text-stone-400 text-sm mt-4">
             No dishes found
           </p>
         ) : (
-          filteredDishes.map((dish) => (
-            <div
-              key={dish.id}
-              className="bg-white rounded-[2.5rem] p-3 shadow-sm border border-stone-100"
-            >
-              <div className="relative rounded-[2rem] overflow-hidden mb-4 aspect-video">
-                <img
-                  src={dish.image}
-                  alt={dish.name}
-                  className="w-full h-full object-cover"
-                />
-                <div className="absolute top-4 left-4 bg-white px-3 py-1 rounded-full text-xs font-bold shadow-sm">
-                  {dish.category}
+          filteredDishes.map((dish) => {
+            const quantity = getDishQuantity(dish.id); 
+            
+            return (
+              <div
+                key={dish.id}
+                className="bg-white rounded-3xl p-2 shadow-sm border border-stone-100 flex flex-col"
+              >
+                {/* CHANGED: aspect-square for a tighter image block */}
+                <div className="relative rounded-[1.25rem] overflow-hidden mb-3 aspect-square bg-stone-100">
+                  <img
+                    src={dish.image}
+                    alt={dish.name}
+                    className="w-full h-full object-cover"
+                  />
+                  {/* Category tag made smaller */}
+                  <div className="absolute top-2 left-2 bg-white/90 backdrop-blur-sm px-2 py-0.5 rounded-md text-[9px] font-bold text-stone-700 shadow-sm truncate max-w-[80%]">
+                    {dish.category}
+                  </div>
+                </div>
+
+                <div className="px-1 pb-1 flex-1 flex flex-col justify-between">
+                  <div className="mb-3">
+                    <h3 className="text-sm font-bold leading-tight text-stone-900 line-clamp-2 mb-1">
+                      {dish.name}
+                    </h3>
+                    <p className="text-orange-600 font-black text-sm">₹{dish.price}</p>
+                  </div>
+
+                  {/* CHANGED: Tighter layout for the bottom action bar */}
+                  <div className="flex justify-between items-end gap-1 mt-auto">
+                    <button
+                      onClick={() => setSelectedDish(dish)}
+                      className="flex items-center gap-1 text-[10px] font-bold text-stone-400 hover:text-stone-700 transition-colors pb-1"
+                    >
+                      <Info size={12} />
+                      Info
+                    </button>
+
+                    {quantity === 0 ? (
+                      <button
+                        onClick={() => addToCart(dish)}
+                        className="bg-stone-900 text-white p-2 rounded-xl hover:bg-orange-600 hover:shadow-lg transition-all active:scale-90"
+                      >
+                        <Plus size={16} strokeWidth={3} />
+                      </button>
+                    ) : (
+                      <div className="flex items-center bg-orange-600 text-white rounded-xl p-0.5 shadow-md shadow-orange-200 animate-in fade-in zoom-in-95 duration-200">
+                        <button 
+                          onClick={() => updateQuantity(dish.id, -1)} 
+                          className="p-1.5 hover:bg-orange-700 rounded-lg transition-colors active:scale-90"
+                        >
+                          <Minus size={14} strokeWidth={3} />
+                        </button>
+                        <span className="w-5 text-center font-bold text-xs">
+                          {quantity}
+                        </span>
+                        <button 
+                          onClick={() => updateQuantity(dish.id, 1)} 
+                          className="p-1.5 hover:bg-orange-700 rounded-lg transition-colors active:scale-90"
+                        >
+                          <Plus size={14} strokeWidth={3} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
-
-              <div className="px-2 pb-2">
-                <div className="flex justify-between items-start gap-2">
-                  <h3 className="text-lg font-bold leading-tight">{dish.name}</h3>
-                  <p className="text-orange-600 font-black">₹{dish.price}</p>
-                </div>
-
-                <div className="flex justify-between items-center mt-6">
-                  <button
-                    onClick={() => setSelectedDish(dish)}
-                    className="flex items-center gap-1.5 text-xs font-bold text-stone-400 hover:text-stone-700 transition-colors"
-                  >
-                    <Info size={16} />
-                    Details
-                  </button>
-
-                  <button
-                    onClick={() => addToCart(dish)}
-                    className="bg-stone-900 text-white p-3 rounded-2xl hover:bg-orange-600 hover:shadow-lg transition-all active:scale-90"
-                  >
-                    <Plus size={18} strokeWidth={3} />
-                  </button>
-                </div>
-              </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
 
-      {/* Cart Button */}
       {isLoaded && cartCount > 0 && (
-        <div className="fixed bottom-8 right-6 left-6 flex justify-center z-40">
+        <div className="fixed bottom-6 right-4 left-4 flex justify-center z-40">
           <Link
-            href="/customer/cart"
-            className="flex items-center gap-4 bg-orange-600 hover:bg-orange-700 text-white px-8 py-4 rounded-3xl shadow-[0_8px_30px_rgb(234,88,12,0.3)] transition-all active:scale-95"
+            href={`/customer/cart?table=${tableNumber}`}
+            className="flex items-center justify-between w-full max-w-sm bg-orange-600 hover:bg-orange-700 text-white px-5 py-4 rounded-2xl shadow-[0_8px_30px_rgb(234,88,12,0.3)] transition-all active:scale-95"
           >
-            <div className="relative">
-              <ShoppingBag size={22} />
-              <span className="absolute -top-2 -right-2 bg-white text-orange-600 text-[10px] font-black w-4 h-4 rounded-full flex items-center justify-center">
-                {cartCount}
-              </span>
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <ShoppingBag size={20} />
+              </div>
+              <div className="flex flex-col">
+                <span className="text-[10px] font-semibold text-orange-200 uppercase tracking-wide leading-none">
+                  {cartCount} {cartCount === 1 ? 'Item' : 'Items'} Added
+                </span>
+                <span className="font-bold text-sm leading-none mt-1">View Order</span>
+              </div>
             </div>
-            <span className="font-bold text-lg">View Order</span>
+            <div className="bg-white/20 p-2 rounded-xl">
+              <Plus size={16} className="rotate-45" />
+            </div>
           </Link>
         </div>
       )}
 
-      {/* Dish Modal */}
+      {/* Dish Modal (Unchanged to keep the expanded view spacious) */}
       {selectedDish && (
         <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-sm flex items-center justify-center p-6 z-50 transition-opacity">
           <div className="bg-white p-6 rounded-[2.5rem] max-w-md w-full shadow-2xl animate-in zoom-in-95 duration-200">
@@ -243,15 +273,35 @@ export default function MenuPage() {
               {selectedDish.description}
             </p>
             
-            <button
-              onClick={() => {
-                addToCart(selectedDish);
-                setSelectedDish(null);
-              }}
-              className="w-full bg-stone-900 hover:bg-orange-600 text-white py-4 rounded-2xl font-bold text-lg transition-colors shadow-lg active:scale-[0.98]"
-            >
-              Add to My Order
-            </button>
+            {getDishQuantity(selectedDish.id) === 0 ? (
+              <button
+                onClick={() => addToCart(selectedDish)}
+                className="w-full bg-stone-900 hover:bg-orange-600 text-white py-4 rounded-2xl font-bold text-lg transition-colors shadow-lg active:scale-[0.98]"
+              >
+                Add to My Order
+              </button>
+            ) : (
+              <div className="flex items-center justify-between bg-orange-50 rounded-2xl p-2 border border-orange-100">
+                <button 
+                  onClick={() => updateQuantity(selectedDish.id, -1)} 
+                  className="bg-white text-orange-600 p-3 rounded-xl shadow-sm hover:bg-orange-100 transition-colors active:scale-90"
+                >
+                  <Minus size={20} strokeWidth={3} />
+                </button>
+                <div className="flex flex-col items-center">
+                  <span className="text-xs font-bold text-orange-400 uppercase tracking-widest">Quantity</span>
+                  <span className="text-2xl font-black text-stone-900">
+                    {getDishQuantity(selectedDish.id)}
+                  </span>
+                </div>
+                <button 
+                  onClick={() => updateQuantity(selectedDish.id, 1)} 
+                  className="bg-orange-600 text-white p-3 rounded-xl shadow-md shadow-orange-200 hover:bg-orange-700 transition-colors active:scale-90"
+                >
+                  <Plus size={20} strokeWidth={3} />
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
