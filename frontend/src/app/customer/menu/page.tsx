@@ -2,14 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { 
-  Search, 
-  ShoppingBag, 
-  X, 
-  Plus, 
-  Minus, 
-  Info, 
-  Home, 
-  ReceiptText 
+  Search, ShoppingBag, X, Plus, Minus, Info, Home, ReceiptText 
 } from "lucide-react";
 import Link from "next/link";
 import { useCart, Dish } from "../component/cartContext";
@@ -144,7 +137,6 @@ export default function MenuPage() {
         ))}
       </div>
 
-      {/* CHANGED: grid-cols-2 for mobile to match reference image */}
       <div className="px-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
         {filteredDishes.length === 0 ? (
           <p className="text-center col-span-full text-stone-400 text-sm mt-4">
@@ -159,14 +151,12 @@ export default function MenuPage() {
                 key={dish.id}
                 className="bg-white rounded-3xl p-2 shadow-sm border border-stone-100 flex flex-col"
               >
-                {/* CHANGED: aspect-square for a tighter image block */}
                 <div className="relative rounded-[1.25rem] overflow-hidden mb-3 aspect-square bg-stone-100">
                   <img
                     src={dish.image}
                     alt={dish.name}
                     className="w-full h-full object-cover"
                   />
-                  {/* Category tag made smaller */}
                   <div className="absolute top-2 left-2 bg-white/90 backdrop-blur-sm px-2 py-0.5 rounded-md text-[9px] font-bold text-stone-700 shadow-sm truncate max-w-[80%]">
                     {dish.category}
                   </div>
@@ -180,7 +170,6 @@ export default function MenuPage() {
                     <p className="text-orange-600 font-black text-sm">₹{dish.price}</p>
                   </div>
 
-                  {/* CHANGED: Tighter layout for the bottom action bar */}
                   <div className="flex justify-between items-end gap-1 mt-auto">
                     <button
                       onClick={() => setSelectedDish(dish)}
@@ -248,7 +237,6 @@ export default function MenuPage() {
         </div>
       )}
 
-      {/* Dish Modal (Unchanged to keep the expanded view spacious) */}
       {selectedDish && (
         <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-sm flex items-center justify-center p-6 z-50 transition-opacity">
           <div className="bg-white p-6 rounded-[2.5rem] max-w-md w-full shadow-2xl animate-in zoom-in-95 duration-200">

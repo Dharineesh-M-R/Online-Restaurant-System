@@ -2,19 +2,21 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { ArrowLeft, Receipt, CheckCircle2, UtensilsCrossed, Clock } from "lucide-react";
+import { 
+  ArrowLeft, Receipt, CheckCircle2, UtensilsCrossed, 
+  Clock, IndianRupee, CreditCard, Smartphone, Wallet
+} from "lucide-react";
 import { useCart } from "../component/cartContext";
 
 export default function BillPage() {
-  const router = useRouter();
+  const { placedServes, isLoaded, tableNumber, sessionId } = useCart();
   
-  const { placedServes, clearCart, isLoaded, tableNumber, sessionId } = useCart();
-  
-  const [showPopup, setShowPopup] = useState(false);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [showSuccessPopup, setShowSuccessPopup] = useState(false);
   const [isRequesting, setIsRequesting] = useState(false);
+  const [isBillRequested, setIsBillRequested] = useState(false);
+  const [selectedMethod, setSelectedMethod] = useState<string | null>(null);
 
-  // Grab the API URL for the fetch call
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://172.18.170.244:5000";
 
   if (!isLoaded) {
@@ -33,33 +35,36 @@ export default function BillPage() {
   const platformFee = 15;
   const grandTotal = subtotal > 0 ? subtotal + gst + platformFee : 0;
 
-  // UPDATED FUNCTION: Now hits the backend to close the session
-  const handleGetBill = async () => {
-    if (isRequesting || placedServes.length === 0 || !sessionId) return;
+  // Triggered when they select a payment method in the modal
+  const handleRequestBill = async (method: string) => {
+    if (isRequesting || isBillRequested || !sessionId) return;
     setIsRequesting(true);
+    setShowPaymentModal(false);
+    setSelectedMethod(method);
     
     try {
-      // 1. Tell the backend to close this table's session
+      // Send the selected payment method to the backend
       const res = await fetch(`${apiUrl}/sessions/${sessionId}/bill`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" }
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paymentMethod: method })
       });
 
-      if (!res.ok) throw new Error("Failed to close session on backend");
+      if (!res.ok) throw new Error("Failed to request bill on backend");
 
-      // 2. Show the success popup
-      setShowPopup(true);
+      setIsBillRequested(true);
+      setShowSuccessPopup(true);
 
-      // 3. Clear local frontend data and redirect
       setTimeout(() => {
-        clearCart(); 
-        router.push("/");
+        setShowSuccessPopup(false);
       }, 4000); 
 
     } catch (err) {
       console.error("Error requesting bill:", err);
-      setIsRequesting(false); // Let them try again if it fails
       alert("Failed to request bill. Please check your connection.");
+      setSelectedMethod(null);
+    } finally {
+      setIsRequesting(false);
     }
   };
 
@@ -79,7 +84,7 @@ export default function BillPage() {
       </header>
 
       <main className="flex-1 p-6 pb-40">
-        {placedServes.length === 0 && !showPopup ? (
+        {placedServes.length === 0 && !showSuccessPopup ? (
           <div className="flex flex-col items-center justify-center pt-24 text-center animate-in fade-in duration-500">
             <div className="w-24 h-24 bg-stone-200 rounded-full flex items-center justify-center mb-6">
               <Receipt className="text-stone-400" size={40} />
@@ -95,7 +100,6 @@ export default function BillPage() {
         ) : (
           <div className="max-w-md mx-auto">
             <div className="bg-white rounded-4xl p-6 shadow-sm border border-stone-100 relative overflow-hidden">
-              
               <div className="text-center mb-6 pb-6 border-b border-dashed border-stone-200">
                 <UtensilsCrossed className="mx-auto text-orange-600 mb-2" size={28} />
                 <h2 className="text-xl font-black text-stone-900">Order Summary</h2>
@@ -108,7 +112,6 @@ export default function BillPage() {
                     <h3 className="text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-3 border-b border-stone-100 pb-2">
                       Serve {serve.serveNumber}
                     </h3>
-                    
                     <div className="space-y-4">
                       {serve.items.map((item) => (
                         <div key={item.id} className="flex justify-between items-start gap-4">
@@ -116,9 +119,7 @@ export default function BillPage() {
                             <span className="font-bold text-stone-900 w-6">{item.quantity}x</span>
                             <div>
                               <h3 className="font-bold text-stone-700 leading-tight">{item.name}</h3>
-                              {item.notes && (
-                                <p className="text-[10px] text-stone-400 mt-1 uppercase tracking-wider">Note: {item.notes}</p>
-                              )}
+                              {item.notes && <p className="text-[10px] text-stone-400 mt-1 uppercase tracking-wider">Note: {item.notes}</p>}
                             </div>
                           </div>
                           <span className="font-bold text-stone-900 shrink-0">₹{item.price * item.quantity}</span>
@@ -153,38 +154,75 @@ export default function BillPage() {
         )}
       </main>
 
+      {/* Sticky Bottom Action */}
       {placedServes.length > 0 && (
         <div className="fixed bottom-0 left-0 right-0 bg-white p-4 pb-safe border-t border-stone-100 shadow-[0_-10px_40px_rgba(0,0,0,0.05)] z-30">
           <div className="max-w-md mx-auto">
-            <button onClick={handleGetBill} disabled={isRequesting} className="bg-orange-600 text-white py-4 rounded-2xl font-bold text-lg w-full shadow-lg shadow-orange-200 active:scale-[0.98] disabled:opacity-70 transition-all flex items-center justify-center gap-2">
-              {isRequesting ? <><div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" /> Requesting...</> : <><Receipt size={20} /> Get Bill</>}
+            <button 
+              onClick={() => !isBillRequested && setShowPaymentModal(true)} 
+              disabled={isRequesting || isBillRequested} 
+              className={`py-4 rounded-2xl font-bold text-lg w-full shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-2
+                ${isBillRequested ? "bg-green-100 text-green-700 shadow-none cursor-not-allowed" : "bg-orange-600 text-white shadow-orange-200 disabled:opacity-70"}`}
+            >
+              {isRequesting ? (
+                <><div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" /> Alerting Cashier...</>
+              ) : isBillRequested ? (
+                <><CheckCircle2 size={20} /> Waiter bringing {selectedMethod?.toUpperCase()} bill</>
+              ) : (
+                <><Receipt size={20} /> Request Bill</>
+              )}
             </button>
           </div>
         </div>
       )}
 
-      {showPopup && (
+      {/* Payment Selection Modal */}
+      {showPaymentModal && (
+        <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-4 transition-opacity">
+          <div className="bg-white rounded-[2.5rem] p-6 w-full max-w-sm shadow-2xl animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-200">
+            <h3 className="text-xl font-black text-stone-900 mb-1 text-center">How would you like to pay?</h3>
+            <p className="text-stone-500 text-sm text-center mb-6">Select a method so our waiter brings the right machine.</p>
+            
+            <div className="space-y-3">
+              <button onClick={() => handleRequestBill("upi")} className="w-full flex items-center justify-between p-4 rounded-2xl border-2 border-stone-100 hover:border-purple-500 hover:bg-purple-50 transition-colors active:scale-[0.98]">
+                <div className="flex items-center gap-3"><Smartphone size={24} className="text-purple-600" /><span className="font-bold text-stone-900">UPI / QR Code</span></div>
+                <ArrowLeft size={16} className="text-stone-300 rotate-180" />
+              </button>
+              
+              <button onClick={() => handleRequestBill("card")} className="w-full flex items-center justify-between p-4 rounded-2xl border-2 border-stone-100 hover:border-blue-500 hover:bg-blue-50 transition-colors active:scale-[0.98]">
+                <div className="flex items-center gap-3"><CreditCard size={24} className="text-blue-600" /><span className="font-bold text-stone-900">Credit / Debit Card</span></div>
+                <ArrowLeft size={16} className="text-stone-300 rotate-180" />
+              </button>
+
+              <button onClick={() => handleRequestBill("cash")} className="w-full flex items-center justify-between p-4 rounded-2xl border-2 border-stone-100 hover:border-green-500 hover:bg-green-50 transition-colors active:scale-[0.98]">
+                <div className="flex items-center gap-3"><IndianRupee size={24} className="text-green-600" /><span className="font-bold text-stone-900">Cash</span></div>
+                <ArrowLeft size={16} className="text-stone-300 rotate-180" />
+              </button>
+            </div>
+            
+            <button onClick={() => setShowPaymentModal(false)} className="w-full mt-4 py-3 text-stone-400 font-bold hover:text-stone-600">Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {/* Success Popup */}
+      {showSuccessPopup && (
         <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-6 transition-opacity duration-300">
           <div className="bg-white rounded-[2.5rem] p-8 w-full max-w-sm text-center shadow-2xl animate-in zoom-in-95 duration-300">
             <div className="w-20 h-20 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-6 relative">
               <CheckCircle2 className="text-green-500 relative z-10" size={40} />
               <div className="absolute inset-0 bg-green-100 rounded-full animate-ping opacity-75"></div>
             </div>
-            <h2 className="text-2xl font-black text-stone-900 mb-4 leading-tight">Bill Generated!</h2>
-            <div className="bg-orange-50 rounded-2xl p-4 mb-6 border border-orange-100 flex items-start gap-3 text-left">
-              <Clock className="text-orange-500 shrink-0 mt-0.5" size={20} />
+            <h2 className="text-2xl font-black text-stone-900 mb-4 leading-tight">Bill Requested!</h2>
+            <div className="bg-orange-50 rounded-2xl p-4 mb-2 border border-orange-100 flex items-start gap-3 text-left">
+              <Wallet className="text-orange-500 shrink-0 mt-0.5" size={20} />
               <p className="text-sm text-stone-700 font-medium leading-relaxed">
-                The bill is being generated and the waiter will bring it to your table in <span className="font-bold text-orange-600">1 min</span>.
+                The billing desk has been alerted. A waiter will bring your bill to the table shortly.
               </p>
             </div>
-            <div className="w-full bg-stone-100 h-1.5 rounded-full overflow-hidden">
-              <div className="bg-green-500 h-full animate-[progress_4s_ease-in-out_forwards] w-full origin-left" />
-            </div>
-            <p className="text-[10px] text-stone-400 font-bold uppercase tracking-wider mt-4">Redirecting to home...</p>
           </div>
         </div>
       )}
-      <style jsx global>{`@keyframes progress { 0% { transform: scaleX(0); } 100% { transform: scaleX(1); } }`}</style>
     </div>
   );
 }

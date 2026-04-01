@@ -18,7 +18,7 @@ router.get("/tables", async (req, res) => {
     const { data: activeSessions, error: sessionErr } = await supabase
       .from("table_sessions")
       .select("*")
-      .in("status", ["active", "billed"]);
+      .in("status", ["active", "billed", "billed_cash", "billed_card", "billed_upi"]);
 
     if (sessionErr) throw sessionErr;
 
@@ -41,8 +41,8 @@ router.get("/tables", async (req, res) => {
       return {
         id: table.id,
         tableNumber: table.table_number,
-        // Status logic: If session is 'billed', show Billed. If 'active', show Occupied. Else Available.
-        status: session ? (session.status === "billed" ? "Billed" : "Occupied") : "Available",
+        status: session ? (session.status.startsWith("billed") ? "Billed" : "Occupied") : "Available",
+        paymentMethod: session && session.status.startsWith("billed_") ? session.status.split("_")[1] : null,
         sessionId: session ? session.session_id : null,
         orderId: order ? order.id : null,
         itemTotal: order ? Number(order.total_amount) : 0,

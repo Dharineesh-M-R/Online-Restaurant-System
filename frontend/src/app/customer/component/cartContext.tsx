@@ -1,7 +1,7 @@
 "use client";
 
-import { createContext, useContext, useState, useEffect, ReactNode, Suspense, useCallback } from "react";
-// 1. Added usePathname here
+// 1. IMPORTED useRef HERE 👇
+import { createContext, useContext, useState, useEffect, ReactNode, Suspense, useCallback, useRef } from "react";
 import { useSearchParams, usePathname } from "next/navigation"; 
 
 export interface Dish {
@@ -33,7 +33,7 @@ export interface PlacedServe {
 interface CartContextType {
   cart: CartItem[];
   sessionId: string | null;
-  tableNumber: string | null; // 2. Allowed to be null
+  tableNumber: string | null;
   addToCart: (dish: Dish) => void;
   updateQuantity: (id: number, delta: number) => void;
   updateNotes: (id: number, text: string) => void;
@@ -44,14 +44,14 @@ interface CartContextType {
   serveCount: number;
   placedServes: PlacedServe[];
   placeCurrentOrder: () => void;
-  cancelSession: () => Promise<void>; // Added cancel session capability
+  cancelSession: () => Promise<void>; 
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
 function CartProviderInner({ children }: { children: ReactNode }) {
   const searchParams = useSearchParams();
-  const pathname = usePathname(); // Get current route path
+  const pathname = usePathname(); 
   const urlTable = searchParams.get("table");
   
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://172.18.170.244:5000";
@@ -63,14 +63,18 @@ function CartProviderInner({ children }: { children: ReactNode }) {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [tableNumber, setTableNumber] = useState<string | null>(null);
 
+  // 2. CREATED THE LOCK HERE 👇
+  const isUpdatingCart = useRef(false);
+
   // --- 1. INITIALIZE SESSION ---
   useEffect(() => {
     let activeTable = urlTable || localStorage.getItem("restaurant_table");
 
-    if (!activeTable) {
-      // If no table is found, just mark loaded but DO NOT fetch session
+    // FIX: Sanitize the data! Destroy literal string "null" or "undefined"
+    if (!activeTable || activeTable === "null" || activeTable === "NULL" || activeTable === "undefined") {
       setTableNumber(null);
       setIsLoaded(true);
+      localStorage.removeItem("restaurant_table"); // Clean up the bad memory!
       return; 
     }
 
@@ -95,13 +99,25 @@ function CartProviderInner({ children }: { children: ReactNode }) {
     initializeSession();
   }, [urlTable, apiUrl]);
 
-  // --- 2. GLOBAL POLLING (SYNCS EVERY 3 SECONDS) ---
+  // --- 2. GLOBAL POLLING (SYNCS EVERY 3 SECONDS) & AUTO-KICK ---
   useEffect(() => {
     if (!sessionId) return;
 
     const syncTableData = async () => {
+      // 3. CHECK THE LOCK: Abort polling if user is tapping buttons 👇
+      if (isUpdatingCart.current) return;
+
       try {
         const res = await fetch(`${apiUrl}/sessions/${sessionId}/sync`);
+        
+        // --- AUTO-KICK LOGIC ---
+        if (res.status === 404) {
+          console.log("Session closed by restaurant. Auto-kicking to home...");
+          clearCart(); 
+          window.location.replace("/"); 
+          return;
+        }
+
         if (res.ok) {
           const data = await res.json();
           setCart(data.cart);
@@ -113,8 +129,8 @@ function CartProviderInner({ children }: { children: ReactNode }) {
       }
     };
 
-    syncTableData(); // Initial fetch
-    const interval = setInterval(syncTableData, 3000); // Poll every 3 seconds
+    syncTableData(); 
+    const interval = setInterval(syncTableData, 3000); 
 
     return () => clearInterval(interval);
   }, [sessionId, apiUrl]);
@@ -122,8 +138,12 @@ function CartProviderInner({ children }: { children: ReactNode }) {
 
   // --- 3. HELPER: PUSH CART UPDATES TO SERVER ---
   const updateSharedCart = async (newCart: CartItem[]) => {
-    setCart(newCart); // Update UI immediately
+    setCart(newCart); 
     if (!sessionId) return;
+
+    // 4. ENGAGE THE LOCK HERE 👇
+    isUpdatingCart.current = true;
+
     try {
       await fetch(`${apiUrl}/sessions/${sessionId}/cart`, {
         method: "PATCH",
@@ -132,6 +152,11 @@ function CartProviderInner({ children }: { children: ReactNode }) {
       });
     } catch (error) {
       console.error("Failed to update shared cart", error);
+    } finally {
+      // 5. RELEASE THE LOCK HERE (with a tiny delay to ensure database saved) 👇
+      setTimeout(() => {
+        isUpdatingCart.current = false;
+      }, 500);
     }
   };
 
@@ -176,10 +201,9 @@ function CartProviderInner({ children }: { children: ReactNode }) {
     };
 
     try {
-      // Optimistic UI update
       setPlacedServes((prev) => [...prev, newServe]);
       setServeCount(newServeNum);
-      setCart([]); // Clear local instantly
+      setCart([]); 
       
       await fetch(`${apiUrl}/sessions/${sessionId}/orders`, {
         method: "POST",
@@ -214,10 +238,10 @@ function CartProviderInner({ children }: { children: ReactNode }) {
   const cartCount = cart.reduce((total, item) => total + item.quantity, 0);
 
   // --- 5. ROUTE PROTECTION LOGIC ---
-  const isHomePage = pathname === "/";
+  
+  const isCustomerRoute = pathname?.startsWith("/customer");
 
-  // If there is no table number, and we are NOT on the home page, show the error.
-  if (!tableNumber && isLoaded && !isHomePage) {
+  if (isCustomerRoute && !tableNumber && isLoaded) {
     return (
       <div className="min-h-screen bg-stone-50 flex flex-col items-center justify-center p-6 text-center font-sans">
         <div className="w-24 h-24 bg-red-50 rounded-full flex items-center justify-center mb-6 border-8 border-red-100">

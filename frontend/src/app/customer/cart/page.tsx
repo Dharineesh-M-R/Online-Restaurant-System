@@ -19,7 +19,6 @@ export default function CartPage() {
   const [showPopup, setShowPopup] = useState(false);
   const [isOrdering, setIsOrdering] = useState(false); 
   
-  // Create a ref to store our timeout so we can cancel it if the user clicks a button
   const redirectTimer = useRef<NodeJS.Timeout | null>(null);
 
   if (!isLoaded) {
@@ -42,28 +41,17 @@ export default function CartPage() {
     if (isOrdering) return;
     setIsOrdering(true);
     
-    const orderPayload = {
-      sessionId: sessionId,
-      tableNumber: tableNumber,
-      serveNumber: serveCount + 1,
-      items: cart,
-      total: grandTotal
-    };
-    console.log("-> Sending to DB:", orderPayload);
-
     placeCurrentOrder(); 
     setShowPopup(true);
 
-    // Auto-redirect to the Bill page after 5 seconds if no button is clicked
     redirectTimer.current = setTimeout(() => {
       router.push(`/customer/getbill?table=${tableNumber}`);
     }, 5000);
   };
 
-  // Handle manual button clicks inside the popup
   const handlePopupAction = (path: string) => {
     if (redirectTimer.current) {
-      clearTimeout(redirectTimer.current); // Cancel the 5-second auto-redirect
+      clearTimeout(redirectTimer.current); 
     }
     router.push(path);
   };
@@ -154,7 +142,18 @@ export default function CartPage() {
                     </div>
                     <div className="mt-3 flex items-center gap-2 bg-[#F8F9FB] rounded-xl px-3 py-2.5">
                       <MessageSquareText size={14} className="text-gray-400 shrink-0" />
-                      <input type="text" placeholder="Add cooking instructions..." className="bg-transparent text-xs w-full outline-none text-gray-700 placeholder:text-gray-400" value={item.notes || ""} onChange={(e) => updateNotes(item.id, e.target.value)} />
+                      
+                      {/* FIX: Changed to defaultValue and onBlur to stop database spam on every keystroke! */}
+                      <input 
+                        type="text" 
+                        placeholder="Add cooking instructions (e.g. less spicy)..." 
+                        className="bg-transparent text-xs w-full outline-none text-gray-700 placeholder:text-gray-400" 
+                        defaultValue={item.notes || ""} 
+                        onBlur={(e) => updateNotes(item.id, e.target.value)} 
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') e.currentTarget.blur();
+                        }}
+                      />
                     </div>
                   </div>
                 ))}
@@ -200,7 +199,6 @@ export default function CartPage() {
         </div>
       )}
 
-      {/* UPDATED POPUP */}
       {showPopup && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-6 transition-opacity duration-300">
           <div className="bg-white rounded-4xl p-8 w-full max-w-sm text-center shadow-2xl animate-in zoom-in-95 duration-300">
@@ -211,7 +209,6 @@ export default function CartPage() {
             <p className="text-gray-500 mb-6">Your order has been sent to the kitchen.</p>
             
             <div className="flex flex-col gap-3 mb-6">
-              {/* Option 1: Continue Ordering */}
               <button 
                 onClick={() => handlePopupAction(`/customer/menu?table=${tableNumber}`)}
                 className="w-full bg-orange-50 text-orange-600 font-bold py-3.5 rounded-xl border border-orange-100 hover:bg-orange-100 transition-colors"
@@ -219,16 +216,14 @@ export default function CartPage() {
                 Add More Serves
               </button>
               
-              {/* Option 2: Go to Bill */}
               <button 
                 onClick={() => handlePopupAction(`/customer/getbill?table=${tableNumber}`)}
                 className="w-full bg-black text-white font-bold py-3.5 rounded-xl hover:bg-gray-800 transition-colors shadow-lg"
               >
-                Get Bill
+                Request Bill
               </button>
             </div>
 
-            {/* Visual timer bar now takes exactly 5 seconds (linear looks better for a countdown) */}
             <div className="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden">
               <div className="bg-green-500 h-full animate-[progress_5s_linear] w-full origin-left" />
             </div>
@@ -237,7 +232,6 @@ export default function CartPage() {
         </div>
       )}
       
-      {/* Changed to 5s to match the JS timeout perfectly */}
       <style jsx global>{`@keyframes progress { 0% { transform: scaleX(0); } 100% { transform: scaleX(1); } }`}</style>
     </div>
   );

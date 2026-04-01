@@ -9,19 +9,23 @@ router.get("/", async (req, res) => {
   if (!table) return res.status(400).json({ error: "Table number is required" });
 
   try {
+    // FIX: Look for ANY session that is not "completed". 
+    // This catches "active", "billed", "billed_cash", etc. preventing Ghost Sessions!
     const { data: activeSession, error: fetchError } = await supabase
       .from("table_sessions")
       .select("session_id, cart_items")
       .eq("table_number", table)
-      .eq("status", "active")
+      .neq("status", "completed") 
       .maybeSingle(); 
 
     if (fetchError) throw fetchError;
 
+    // If a session exists (even if it's currently waiting for a bill), return it!
     if (activeSession) {
-      return res.json({ sessionId: activeSession.session_id, cart: activeSession.cart_items });
+      return res.json({ sessionId: activeSession.session_id, cart: activeSession.cart_items || [] });
     }
 
+    // Only create a brand new session if no active/billed sessions exist
     const newSessionId = `sess_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
     const { error: insertError } = await supabase
       .from("table_sessions")
@@ -46,6 +50,7 @@ router.get("/:sessionId/sync", async (req, res) => {
       .from("table_sessions")
       .select("table_number, cart_items")
       .eq("session_id", sessionId)
+      .neq("status", "completed")
       .single();
 
     if (sessionErr || !sessionData) return res.status(404).json({ error: "Session not found" });
@@ -198,7 +203,7 @@ router.post("/:sessionId/orders", async (req, res) => {
         .from("orders")
         .insert([{
           table_id: tableInfo.id,
-          session_id: sessionId, // <-- Linked correctly here
+          session_id: sessionId, 
           total_amount: serveTotal,
           serve_count: 1,
           order_status: "pending"
@@ -254,34 +259,47 @@ router.post("/:sessionId/orders", async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 });
-// 5. Close Session / Request Bill
+
+// 5. Request Bill (Alerts the Billing Desk with Payment Method)
 router.post("/:sessionId/bill", async (req, res) => {
   const { sessionId } = req.params;
+  const { paymentMethod } = req.body; // <-- Grab the payment method
 
   try {
-    // A. Mark the table session as 'billed' (so it no longer pulls as 'active')
+    // Append the chosen method to the status (e.g., 'billed_cash')
+    const finalStatus = paymentMethod ? `billed_${paymentMethod}` : "billed";
+
     const { error: sessionErr } = await supabase
       .from("table_sessions")
-      .update({ status: "billed" })
+      .update({ status: finalStatus })
       .eq("session_id", sessionId);
 
     if (sessionErr) throw sessionErr;
 
-    // B. Mark the master order as 'completed'
-    const { error: orderErr } = await supabase
-      .from("orders")
-      .update({ order_status: "completed" })
-      .eq("session_id", sessionId)
-      .neq("order_status", "completed");
-
-    if (orderErr) throw orderErr;
-
-    console.log(`[Billing] Session ${sessionId} successfully closed.`);
-    res.json({ success: true, message: "Bill generated and session closed." });
-
+    res.json({ success: true, message: "Bill requested successfully." });
   } catch (err) {
     console.error("Billing Error:", err);
-    res.status(500).json({ error: "Failed to close session" });
+    res.status(500).json({ error: "Failed to request bill" });
   }
 });
+
+// 6. Cancel Session (Walk-outs)
+router.post("/:sessionId/cancel", async (req, res) => {
+  const { sessionId } = req.params;
+
+  try {
+    const { error } = await supabase
+      .from("table_sessions")
+      .update({ status: "cancelled" })
+      .eq("session_id", sessionId);
+
+    if (error) throw error;
+
+    res.json({ success: true, message: "Session cancelled." });
+  } catch (err) {
+    console.error("Cancel Error:", err);
+    res.status(500).json({ error: "Failed to cancel session" });
+  }
+});
+
 export default router;
