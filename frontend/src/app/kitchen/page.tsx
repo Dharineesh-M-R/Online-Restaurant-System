@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { ChefHat, Clock, Flame, CheckCircle, LayoutGrid } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 interface KitchenItem {
   id: string; 
@@ -28,6 +29,16 @@ export default function KitchenDashboard() {
   const stations = ["All", "Veg Starters", "Non Veg Starters", "Breads", "Rices/Noodles", "Desserts"];
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+  const router = useRouter();
+
+  // Protect the route
+  useEffect(() => {
+    const role = localStorage.getItem("staff_role");
+    if (role !== "kitchen") {
+      // Kick them back to login if they aren't authorized!
+      router.push("/login");
+    }
+  }, [router]);
 
   const fetchKitchenOrders = async () => {
     try {

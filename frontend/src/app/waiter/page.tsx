@@ -9,6 +9,7 @@ import {
   ArrowRight,
   Clock
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 // Interface for items sitting in the kitchen waiting to be run to the table
 interface ReadyItem {
@@ -25,6 +26,16 @@ export default function WaiterDashboard() {
   const [loading, setLoading] = useState(true);
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+  const router = useRouter();
+
+  // Protect the route
+  useEffect(() => {
+    const role = localStorage.getItem("staff_role");
+    if (role !== "waiter") {
+      // Kick them back to login if they aren't authorized!
+      router.push("/login");
+    }
+  }, [router]);
 
   // 1. Fetch items that the Kitchen has marked as 'ready'
   const fetchTasks = async () => {
@@ -176,7 +187,7 @@ export default function WaiterDashboard() {
         <div className="flex justify-around max-w-md mx-auto">
           <button 
             onClick={() => setActiveTab("tasks")}
-            className={`flex flex-col items-center p-2 min-w-[80px] transition-colors ${activeTab === "tasks" ? "text-orange-600" : "text-stone-400 hover:text-stone-600"}`}
+            className={`flex flex-col items-center p-2 min-w-20 transition-colors ${activeTab === "tasks" ? "text-orange-600" : "text-stone-400 hover:text-stone-600"}`}
           >
             <div className="relative mb-1">
               <BellRing size={24} strokeWidth={activeTab === "tasks" ? 2.5 : 2} />
@@ -189,7 +200,7 @@ export default function WaiterDashboard() {
           
           <button 
             onClick={() => setActiveTab("tables")}
-            className={`flex flex-col items-center p-2 min-w-[80px] transition-colors ${activeTab === "tables" ? "text-orange-600" : "text-stone-400 hover:text-stone-600"}`}
+            className={`flex flex-col items-center p-2 min-w-20 transition-colors ${activeTab === "tables" ? "text-orange-600" : "text-stone-400 hover:text-stone-600"}`}
           >
             <LayoutGrid size={24} className="mb-1" strokeWidth={activeTab === "tables" ? 2.5 : 2} />
             <span className="text-[10px] font-bold uppercase tracking-widest">Floor</span>
