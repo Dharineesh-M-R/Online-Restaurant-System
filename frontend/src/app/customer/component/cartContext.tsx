@@ -1,6 +1,5 @@
 "use client";
 
-// 1. IMPORTED useRef HERE 👇
 import { createContext, useContext, useState, useEffect, ReactNode, Suspense, useCallback, useRef } from "react";
 import { useSearchParams, usePathname } from "next/navigation"; 
 
@@ -47,6 +46,25 @@ interface CartContextType {
   cancelSession: () => Promise<void>; 
 }
 
+// --- GPS MATH HELPERS ---
+// We use parseFloat to convert the text from the .env file into actual math numbers
+const RESTAURANT_LAT = parseFloat(process.env.NEXT_PUBLIC_LATITUDE || "0"); 
+const RESTAURANT_LNG = parseFloat(process.env.NEXT_PUBLIC_LONGITUDE || "0");
+const MAX_DISTANCE_METERS = 100; // Block orders if further than 100m away
+
+// Haversine formula to calculate exact distance between two GPS coordinates in meters
+function getDistanceFromLatLonInM(lat1: number, lon1: number, lat2: number, lon2: number) {
+  const R = 6371000; // Radius of the earth in m
+  const dLat = (lat2 - lat1) * (Math.PI / 180);
+  const dLon = (lon2 - lon1) * (Math.PI / 180);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
 function CartProviderInner({ children }: { children: ReactNode }) {
@@ -63,18 +81,60 @@ function CartProviderInner({ children }: { children: ReactNode }) {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [tableNumber, setTableNumber] = useState<string | null>(null);
 
-  // 2. CREATED THE LOCK HERE 👇
+  // GPS States
+  const [isLocationValid, setIsLocationValid] = useState<boolean | null>(null);
+  const [locationMessage, setLocationMessage] = useState<string>("");
+
   const isUpdatingCart = useRef(false);
+  const isCustomerRoute = pathname?.startsWith("/customer");
+
+  // --- 0. GPS GEOFENCE CHECK ---
+  useEffect(() => {
+    // We only care about checking location if they are trying to order
+    if (!isCustomerRoute) return;
+
+    // 🚨 DEV TIP: Uncomment the line below to bypass GPS when testing on your laptop!
+    // setIsLocationValid(true); return;
+
+    if (!("geolocation" in navigator)) {
+      setLocationMessage("GPS is not supported on your browser.");
+      setIsLocationValid(false);
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const distance = getDistanceFromLatLonInM(
+          RESTAURANT_LAT,
+          RESTAURANT_LNG,
+          position.coords.latitude,
+          position.coords.longitude
+        );
+
+        if (distance <= MAX_DISTANCE_METERS) {
+          setIsLocationValid(true); // Inside the restaurant!
+        } else {
+          setLocationMessage(`You are ${Math.round(distance)} meters away. You must be inside the restaurant to place an order.`);
+          setIsLocationValid(false); // Fake order detected!
+        }
+      },
+      (error) => {
+        console.warn("Location error:", error);
+        setLocationMessage("Please allow Location Access in your browser settings to verify you are at the table.");
+        setIsLocationValid(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+  }, [isCustomerRoute]);
 
   // --- 1. INITIALIZE SESSION ---
   useEffect(() => {
     let activeTable = urlTable || localStorage.getItem("restaurant_table");
 
-    // FIX: Sanitize the data! Destroy literal string "null" or "undefined"
     if (!activeTable || activeTable === "null" || activeTable === "NULL" || activeTable === "undefined") {
       setTableNumber(null);
       setIsLoaded(true);
-      localStorage.removeItem("restaurant_table"); // Clean up the bad memory!
+      localStorage.removeItem("restaurant_table"); 
       return; 
     }
 
@@ -104,13 +164,11 @@ function CartProviderInner({ children }: { children: ReactNode }) {
     if (!sessionId) return;
 
     const syncTableData = async () => {
-      // 3. CHECK THE LOCK: Abort polling if user is tapping buttons 👇
       if (isUpdatingCart.current) return;
 
       try {
         const res = await fetch(`${apiUrl}/sessions/${sessionId}/sync`);
         
-        // --- AUTO-KICK LOGIC ---
         if (res.status === 404) {
           console.log("Session closed by restaurant. Auto-kicking to home...");
           clearCart(); 
@@ -141,7 +199,6 @@ function CartProviderInner({ children }: { children: ReactNode }) {
     setCart(newCart); 
     if (!sessionId) return;
 
-    // 4. ENGAGE THE LOCK HERE 👇
     isUpdatingCart.current = true;
 
     try {
@@ -153,7 +210,6 @@ function CartProviderInner({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error("Failed to update shared cart", error);
     } finally {
-      // 5. RELEASE THE LOCK HERE (with a tiny delay to ensure database saved) 👇
       setTimeout(() => {
         isUpdatingCart.current = false;
       }, 500);
@@ -237,22 +293,54 @@ function CartProviderInner({ children }: { children: ReactNode }) {
 
   const cartCount = cart.reduce((total, item) => total + item.quantity, 0);
 
-  // --- 5. ROUTE PROTECTION LOGIC ---
-  
-  const isCustomerRoute = pathname?.startsWith("/customer");
+  // --- 5. ROUTE PROTECTION & GEOFENCING LOGIC ---
+  if (isCustomerRoute) {
 
-  if (isCustomerRoute && !tableNumber && isLoaded) {
-    return (
-      <div className="min-h-screen bg-stone-50 flex flex-col items-center justify-center p-6 text-center font-sans">
-        <div className="w-24 h-24 bg-red-50 rounded-full flex items-center justify-center mb-6 border-8 border-red-100">
-          <span className="text-red-500 text-4xl font-black">!</span>
+    // 5A. Check Table Number
+    if (!tableNumber && isLoaded) {
+      return (
+        <div className="min-h-screen bg-stone-50 flex flex-col items-center justify-center p-6 text-center font-sans">
+          <div className="w-24 h-24 bg-red-50 rounded-full flex items-center justify-center mb-6 border-8 border-red-100">
+            <span className="text-red-500 text-4xl font-black">!</span>
+          </div>
+          <h2 className="text-2xl font-black text-stone-900 mb-2">Table Not Found</h2>
+          <p className="text-stone-500 max-w-xs mx-auto leading-relaxed">
+            Please scan the QR code on your table to view the menu and place an order.
+          </p>
         </div>
-        <h2 className="text-2xl font-black text-stone-900 mb-2">Table Not Found</h2>
-        <p className="text-stone-500 max-w-xs mx-auto leading-relaxed">
-          Please scan the QR code on your table to view the menu and place an order.
-        </p>
-      </div>
-    );
+      );
+    }
+
+    // 5B. Location Loading State
+    if (isLocationValid === null) {
+      return (
+        <div className="min-h-screen bg-stone-50 flex flex-col items-center justify-center p-6 text-center font-sans">
+          <div className="w-12 h-12 border-4 border-orange-500 border-t-transparent rounded-full animate-spin mb-6"></div>
+          <h2 className="text-2xl font-black text-stone-900 mb-2">Locating You</h2>
+          <p className="text-stone-500 max-w-xs mx-auto leading-relaxed">
+            Verifying that you are currently inside the restaurant...
+          </p>
+        </div>
+      );
+    }
+
+    // 5C. Location Rejected/Too Far
+    if (isLocationValid === false) {
+      return (
+        <div className="min-h-screen bg-stone-50 flex flex-col items-center justify-center p-6 text-center font-sans">
+          <div className="w-24 h-24 bg-red-50 rounded-full flex items-center justify-center mb-6 border-8 border-red-100">
+            <span className="text-red-500 text-4xl font-black">📍</span>
+          </div>
+          <h2 className="text-2xl font-black text-stone-900 mb-2">Action Blocked</h2>
+          <p className="text-stone-500 max-w-xs mx-auto leading-relaxed mb-6">
+            {locationMessage}
+          </p>
+          <button onClick={() => window.location.reload()} className="bg-orange-600 hover:bg-orange-700 text-white px-8 py-3 rounded-full font-bold shadow-lg transition-all">
+            Check Again
+          </button>
+        </div>
+      );
+    }
   }
 
   return (

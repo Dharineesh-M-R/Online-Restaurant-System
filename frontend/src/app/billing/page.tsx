@@ -26,10 +26,22 @@ export default function BillingDashboard() {
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
   const router = useRouter();
 
-  // Protect the route
+  // Protect the route and Check Shift Expiry
   useEffect(() => {
     const role = localStorage.getItem("staff_role");
-    if (role !== "billing") {
+    const expiry = localStorage.getItem("staff_expiry");
+    const currentTime = new Date().getTime();
+
+    // Check if role is wrong, OR if expiry is missing, OR if 8 hours have passed
+    if (role !== "billing" || !expiry || currentTime > parseInt(expiry)) {
+      
+      // Wipe the expired data
+      localStorage.removeItem("staff_role");
+      localStorage.removeItem("staff_id");
+      localStorage.removeItem("staff_name");
+      localStorage.removeItem("staff_expiry");
+      
+      // Kick them out to the login page
       router.push("/login");
     }
   }, [router]);
