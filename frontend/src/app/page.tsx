@@ -2,12 +2,14 @@
 
 import Link from "next/link";
 import { motion } from "framer-motion";
-// Corrected import path based on your folder structure!
 import { useCart } from "./customer/component/cartContext"; 
 
 export default function HomePage() {
-  // Pull the table number from our global context
   const { tableNumber } = useCart();
+
+  // FIX: Conditionally build the URLs so we don't accidentally pass "null" as a string
+  const menuLink = tableNumber ? `/customer/menu?table=${tableNumber}` : "/customer/menu";
+  const cartLink = tableNumber ? `/customer/cart?table=${tableNumber}` : "/customer/cart";
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-800">
@@ -31,14 +33,14 @@ export default function HomePage() {
           </p>
 
           <div className="flex flex-col sm:flex-row justify-center gap-4 sm:gap-6">
-            {/* Table number dynamically injected into the URL */}
-            <Link href={`/customer/menu?table=${tableNumber}`} className="w-full sm:w-auto">
+            {/* Using the safe links defined above */}
+            <Link href={menuLink} className="w-full sm:w-auto">
               <button className="w-full sm:w-auto min-h-12 bg-white text-orange-600 px-6 py-3 rounded-xl font-semibold shadow-md active:scale-95 transition">
                 View Menu
               </button>
             </Link>
 
-            <Link href={`/customer/cart?table=${tableNumber}`} className="w-full sm:w-auto">
+            <Link href={cartLink} className="w-full sm:w-auto">
               <button className="w-full sm:w-auto min-h-12 bg-black text-white px-6 py-3 rounded-xl font-semibold shadow-md active:scale-95 transition">
                 View Cart
               </button>

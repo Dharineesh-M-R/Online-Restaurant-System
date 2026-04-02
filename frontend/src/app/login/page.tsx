@@ -2,104 +2,136 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { UserCircle, Lock, ArrowRight, Store } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
-
-  const [email, setEmail] = useState("");
+  const [employeeId, setEmployeeId] = useState("");
   const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleLogin = async () => {
-    setLoading(true);
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
     setError("");
+    setIsLoading(true);
 
     try {
-      const res = await fetch("/api/login", {
+      const res = await fetch(`${apiUrl}/admin/auth/login`, {
         method: "POST",
-        body: JSON.stringify({ email, password }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          employeeId: employeeId.trim(), 
+          pin: password 
+        }),
       });
 
       const data = await res.json();
 
-      if (!data.success) {
-        setError("Invalid email or password");
-        setLoading(false);
-        return;
+      if (!res.ok) {
+        throw new Error(data.error || "Login failed");
       }
 
-      // Role-based redirect
-      if (data.role === "admin") router.push("/dashboard");
-      else if (data.role === "waiter") router.push("/waiter");
+      // Save the real credentials to LocalStorage
+      localStorage.setItem("staff_role", data.role);
+      localStorage.setItem("staff_id", data.employeeId);
+      localStorage.setItem("staff_name", data.name);
+
+      // Route them dynamically based on what the database told us!
+      if (data.role === "waiter") router.push("/waiter");
       else if (data.role === "kitchen") router.push("/kitchen");
+      else if (data.role === "billing") router.push("/billing");
+      else setError("Unrecognized role assigned to this user.");
 
-    } catch (err) {
-      setError("Something went wrong. Try again.");
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setIsLoading(false);
     }
-
-    setLoading(false);
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-gray-100 to-gray-200">
+    <div className="min-h-screen bg-[#F8F9FB] flex flex-col items-center justify-center p-4 font-sans">
       
-      <div className="bg-white p-8 rounded-2xl shadow-xl w-[320px]">
-        
-        {/* Logo / Branding */}
-        <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold text-gray-800">FoodieDelight</h1>
-          <p className="text-sm text-gray-500">Smart Dining OS</p>
+      {/* Brand Header */}
+      <div className="flex flex-col items-center mb-8">
+        <div className="bg-orange-100 p-4 rounded-3xl shadow-sm border border-orange-200/50 mb-4">
+          <Store size={36} className="text-orange-600" />
         </div>
+        <h1 className="text-3xl font-black tracking-tight text-gray-900">Foodie Delight</h1>
+        <p className="text-gray-500 font-medium mt-1">Staff Portal Login</p>
+      </div>
 
-        {/* Title */}
-        <h2 className="text-xl font-semibold text-center mb-5 text-gray-700">
-          Staff Login
-        </h2>
+      {/* Login Card */}
+      <div className="bg-white w-full max-w-md rounded-[2.5rem] p-8 shadow-xl shadow-gray-200/50 border border-gray-100">
+        <form onSubmit={handleLogin} className="space-y-5">
+          
+          {/* Employee ID Input */}
+          <div>
+            <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2 ml-1">
+              Employee ID
+            </label>
+            <div className="relative">
+              <UserCircle className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+              <input
+                type="text"
+                required
+                placeholder="e.g., WAI001"
+                value={employeeId}
+                onChange={(e) => setEmployeeId(e.target.value)}
+                className="w-full pl-12 pr-4 py-4 rounded-2xl bg-[#F8F9FB] border-2 border-transparent focus:border-orange-500 focus:bg-white outline-none transition-all text-gray-900 font-bold uppercase placeholder:font-medium placeholder:normal-case"
+              />
+            </div>
+          </div>
 
-        {/* Email */}
-        <input
-          type="text"
-          placeholder="Email"
-          className="w-full p-2 border border-gray-500 rounded mb-4 focus:outline-none focus:ring-2 focus:ring-black-300  placeholder:text-gray-500 text-gray-800"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
+          {/* Password Input */}
+          <div>
+            <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2 ml-1">
+              PIN / Password
+            </label>
+            <div className="relative">
+              <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+              <input
+                type="password"
+                required
+                placeholder="Enter your PIN"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full pl-12 pr-4 py-4 rounded-2xl bg-[#F8F9FB] border-2 border-transparent focus:border-orange-500 focus:bg-white outline-none transition-all text-gray-900 font-bold"
+              />
+            </div>
+          </div>
 
-        {/* Password */}
-        <div className="relative mb-4">
-          <input
-            type={showPassword ? "text" : "password"}
-            placeholder="Password"
-            className="w-full p-2 border border-gray-500 rounded focus:outline-none focus:ring-2 focus:ring-black-300  placeholder:text-gray-500 text-gray-800"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
+          {/* Error Message */}
+          {error && (
+            <div className="bg-red-50 text-red-600 px-4 py-3 rounded-xl text-sm font-bold border border-red-100 animate-in fade-in slide-in-from-top-2">
+              {error}
+            </div>
+          )}
 
-          {/* Toggle Button */}
-          <span
-            onClick={() => setShowPassword(!showPassword)}
-            className="absolute right-3 top-2 cursor-pointer text-sm text-gray-500"
+          {/* Submit Button */}
+          <button
+            type="submit"
+            disabled={isLoading}
+            className="w-full bg-orange-600 hover:bg-orange-700 text-white py-4 rounded-2xl font-bold text-lg shadow-[0_8px_30px_rgb(234,88,12,0.3)] transition-all active:scale-[0.98] disabled:opacity-70 flex items-center justify-center gap-2 mt-2"
           >
-            {showPassword ? "Hide" : "Show"}
-          </span>
-        </div>
+            {isLoading ? (
+              <div className="w-6 h-6 border-4 border-white border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <>
+                Login to Dashboard <ArrowRight size={20} />
+              </>
+            )}
+          </button>
+        </form>
+      </div>
 
-        {/* Error Message */}
-        {error && (
-          <p className="text-red-500 text-sm mb-3 text-center">{error}</p>
-        )}
-
-        {/* Login Button */}
-        <button
-          onClick={handleLogin}
-          disabled={loading}
-          className="w-full bg-orange-500 text-white p-2 rounded-lg hover:bg-orange-600 transition transform hover:scale-105 shadow-md disabled:opacity-50"
-        >
-          {loading ? "Logging in..." : "Login"}
-        </button>
-
+      {/* Helper Text for Testing */}
+      <div className="mt-8 text-center text-xs text-gray-400 font-medium">
+        <p>Mock IDs: <span className="font-bold text-gray-600">WAI001</span> (Waiter), <span className="font-bold text-gray-600">CHF001</span> (Kitchen), <span className="font-bold text-gray-600">BIL001</span> (Billing)</p>
+        <p className="mt-1">Mock Password: <span className="font-bold text-gray-600">1234</span></p>
       </div>
     </div>
   );
