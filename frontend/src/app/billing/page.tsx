@@ -158,7 +158,7 @@ export default function BillingDashboard() {
               key={table.id}
               onClick={() => table.status !== "Available" && setSelectedTable(table)}
               disabled={table.status === "Available"}
-              className={`relative p-5 sm:p-6 rounded-[2rem] shadow-sm border-2 transition-all duration-200 flex flex-col items-center justify-center text-center aspect-square sm:aspect-auto sm:h-48
+              className={`relative p-5 sm:p-6 rounded-4xl shadow-sm border-2 transition-all duration-200 flex flex-col items-center justify-center text-center aspect-square sm:aspect-auto sm:h-48
                 ${table.status === "Available" ? "bg-white border-gray-100 opacity-60 cursor-not-allowed hover:bg-gray-50" : ""}
                 ${table.status === "Occupied" ? "bg-orange-50/50 border-orange-200 hover:bg-orange-100 hover:shadow-md cursor-pointer active:scale-95" : ""}
                 ${table.status === "Billed" ? "bg-red-50 border-red-500 hover:bg-red-100 cursor-pointer active:scale-95 shadow-[0_8px_30px_rgba(239,68,68,0.2)]" : ""}
