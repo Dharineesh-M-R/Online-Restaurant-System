@@ -3,11 +3,9 @@ import supabase from "../supabase.js";
 
 const router = express.Router();
 
-// 1. Fetch items that the kitchen has marked as 'ready'
+// 1. Fetch items that the kitchen has marked as 'ready' (No changes needed here)
 router.get("/tasks", async (req, res) => {
   try {
-    // We only want items that are 'ready' to be served.
-    // We also need to pull the connected menu item name, serve number, and table number!
     const { data: readyItems, error } = await supabase
       .from("order_items")
       .select(`
@@ -25,12 +23,10 @@ router.get("/tasks", async (req, res) => {
 
     if (error) throw error;
 
-    // Flatten the nested Supabase data into the clean array your frontend expects
     const formattedTasks = readyItems.map((item) => ({
       id: item.id,
       name: item.menu_items?.name || "Unknown Item",
       quantity: item.quantity,
-      // Safely dig into the relations to grab the numbers
       tableNumber: item.order_serves?.orders?.tables?.table_number || 0,
       serveNumber: item.order_serves?.serve_number || 1,
     }));
@@ -42,11 +38,9 @@ router.get("/tasks", async (req, res) => {
   }
 });
 
-// 2. Mark an item as 'served' once it reaches the table
+// 2. Mark an item as 'served' (No changes needed here)
 router.patch("/update-item", async (req, res) => {
   const { itemId, status } = req.body;
-
-  // Security check: Waiters should only be changing things to 'served'
   if (status !== "served") {
     return res.status(400).json({ error: "Invalid status update" });
   }
@@ -58,16 +52,21 @@ router.patch("/update-item", async (req, res) => {
       .eq("id", itemId);
 
     if (error) throw error;
-
     res.json({ success: true, message: "Item successfully served!" });
   } catch (err) {
     console.error("Waiter Update Error:", err);
     res.status(500).json({ error: "Failed to update item status" });
   }
 });
-// 3. Fetch all tables and their current occupancy status
+
+/**
+ * NEW WORKFLOW UPDATES BELOW
+ */
+
+// 3. Fetch Floor Plan - Updated to detect unconfirmed orders
 router.get("/floor-plan", async (req, res) => {
   try {
+    // We deep-select down to order_items to see if any are 'waiting_confirmation'
     const { data: tables, error } = await supabase
       .from("tables")
       .select(`
@@ -75,22 +74,33 @@ router.get("/floor-plan", async (req, res) => {
         status,
         table_sessions (
           status,
-          needs_waiter
+          needs_waiter,
+          orders (
+            order_serves (
+              order_items ( status )
+            )
+          )
         )
       `)
       .order('table_number', { ascending: true });
 
     if (error) throw error;
 
-    // Process data to identify "Live" status
     const floorData = tables.map(t => {
-      // A table is truly "Occupied" if it has an active session
       const activeSession = t.table_sessions?.find(s => s.status === 'active');
       
+      // Check if this table has any items that the customer placed but waiter hasn't confirmed
+      const hasUnconfirmed = activeSession?.orders?.some(order => 
+        order.order_serves?.some(serve => 
+          serve.order_items?.some(item => item.status === 'waiting_confirmation')
+        )
+      ) || false;
+
       return {
         number: t.table_number,
         isOccupied: !!activeSession,
-        needsHelp: activeSession?.needs_waiter || false
+        needsHelp: activeSession?.needs_waiter || false,
+        hasUnconfirmed: hasUnconfirmed // This triggers the pulsing blue/different color
       };
     });
 
@@ -101,12 +111,11 @@ router.get("/floor-plan", async (req, res) => {
   }
 });
 
-// 4. Fetch active order items for a specific table
+// 4. Fetch Table Details - Updated to include ALL items (confirmed and unconfirmed)
 router.get("/table-details/:tableNumber", async (req, res) => {
   const { tableNumber } = req.params;
 
   try {
-    // Get the active session for this table
     const { data: session, error: sessionError } = await supabase
       .from("table_sessions")
       .select("session_id")
@@ -118,7 +127,6 @@ router.get("/table-details/:tableNumber", async (req, res) => {
       return res.status(404).json({ error: "No active session found" });
     }
 
-    // Get all items belonging to this session's orders
     const { data: items, error: itemsError } = await supabase
       .from("order_items")
       .select(`
@@ -132,12 +140,14 @@ router.get("/table-details/:tableNumber", async (req, res) => {
           orders!inner ( session_id )
         )
       `)
-      .eq("order_serves.orders.session_id", session.session_id);
+      .eq("order_serves.orders.session_id", session.session_id)
+      // Sort by status so unconfirmed items appear at the top for the waiter
+      .order('status', { ascending: false });
 
     if (itemsError) throw itemsError;
 
-    // Format for frontend
     const formattedItems = items.map(item => ({
+      id: item.id,
       name: item.menu_items.name,
       quantity: item.quantity,
       status: item.status,
@@ -152,10 +162,39 @@ router.get("/table-details/:tableNumber", async (req, res) => {
   }
 });
 
-// 5. Clear the 'Call Waiter' alert for a specific table
+// 5. NEW: Confirm, Update, or Delete items before sending to Kitchen
+router.patch("/confirm-items", async (req, res) => {
+  const { items } = req.body; 
+  // items expected: Array of { id, quantity, action: 'confirm' | 'delete' | 'update' }
+
+  try {
+    for (const item of items) {
+      if (item.action === 'delete') {
+        await supabase.from("order_items").delete().eq("id", item.id);
+      } else {
+        // If action is 'confirm', we change status to 'pending' (this makes it show in Kitchen)
+        // We also update the quantity in case the waiter changed it
+        const updateData = { quantity: item.quantity };
+        if (item.action === 'confirm') {
+          updateData.status = 'pending';
+        }
+
+        await supabase
+          .from("order_items")
+          .update(updateData)
+          .eq("id", item.id);
+      }
+    }
+    res.json({ success: true, message: "Order items updated/confirmed" });
+  } catch (err) {
+    console.error("Confirm Items Error:", err);
+    res.status(500).json({ error: "Failed to process order confirmation" });
+  }
+});
+
+// 6. Clear 'Call Waiter' (No changes needed here)
 router.patch("/attend-table", async (req, res) => {
   const { tableNumber } = req.body;
-
   try {
     const { error } = await supabase
       .from("table_sessions")
@@ -164,7 +203,6 @@ router.patch("/attend-table", async (req, res) => {
       .eq("status", "active");
 
     if (error) throw error;
-
     res.json({ success: true, message: "Alert cleared" });
   } catch (err) {
     console.error("Attend Table Error:", err);
