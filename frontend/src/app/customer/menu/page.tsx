@@ -1,14 +1,23 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { 
-  Search, ShoppingBag, X, Plus, Minus, Info, Home, ReceiptText 
+import {
+  Search,
+  ShoppingBag,
+  X,
+  Plus,
+  Minus,
+  Info,
+  Home,
+  ReceiptText,
+  BellRing,
 } from "lucide-react";
 import Link from "next/link";
 import { useCart, Dish } from "../component/cartContext";
 
 export default function MenuPage() {
-  const { cart, addToCart, updateQuantity, cartCount, isLoaded, tableNumber } = useCart(); 
+  const { cart, addToCart, updateQuantity, cartCount, isLoaded, tableNumber } =
+    useCart();
 
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
@@ -18,11 +27,28 @@ export default function MenuPage() {
   const [dishes, setDishes] = useState<Dish[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const callWaiter = async () => {
+    try {
+      const apiUrl =
+        process.env.NEXT_PUBLIC_API_URL || "http://172.18.170.244:5000";
+      const res = await fetch(`${apiUrl}/menu/call-waiter`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tableNumber }),
+      });
+      if (res.ok) {
+        alert("A waiter has been notified!");
+      }
+    } catch (err) {
+      console.error("Error calling waiter", err);
+    }
+  };
 
   useEffect(() => {
     const fetchMenuData = async () => {
       try {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://172.18.170.244:5000";
+        const apiUrl =
+          process.env.NEXT_PUBLIC_API_URL || "http://172.18.170.244:5000";
 
         const categoryRes = await fetch(`${apiUrl}/menu/categories`);
         if (!categoryRes.ok) throw new Error("Failed to fetch categories");
@@ -34,7 +60,6 @@ export default function MenuPage() {
         if (!menuRes.ok) throw new Error("Failed to fetch menu items");
         const menuData = await menuRes.json();
         setDishes(menuData.menuItems);
-
       } catch (error) {
         console.error("Error fetching menu:", error);
         setError("Failed to load the menu. Please try again later.");
@@ -47,13 +72,16 @@ export default function MenuPage() {
   }, []);
 
   const filteredDishes = dishes.filter((dish) => {
-    const matchesSearch = dish.name.toLowerCase().includes(search.toLowerCase());
-    const matchesCategory = selectedCategory === "All" || dish.category === selectedCategory;
+    const matchesSearch = dish.name
+      .toLowerCase()
+      .includes(search.toLowerCase());
+    const matchesCategory =
+      selectedCategory === "All" || dish.category === selectedCategory;
     return matchesSearch && matchesCategory;
   });
 
   const getDishQuantity = (dishId: number) => {
-    const cartItem = cart.find(item => item.id === dishId);
+    const cartItem = cart.find((item) => item.id === dishId);
     return cartItem ? cartItem.quantity : 0;
   };
 
@@ -77,32 +105,35 @@ export default function MenuPage() {
     <div className="min-h-screen bg-stone-50 text-stone-900 pb-28">
       <header className="px-4 py-6 flex justify-between items-center">
         <div className="flex items-center gap-3">
-          <Link
-            href="/"
-            className="bg-white p-2.5 rounded-2xl shadow-sm border border-stone-100 hover:bg-orange-600 hover:text-white transition-all shrink-0"
-          >
-            <Home size={20} />
-          </Link>
-
+          {/* ... Home Link ... */}
           <div>
             <h1 className="text-2xl font-black tracking-tight text-stone-900 leading-none">
               Our Menu
             </h1>
             <p className="text-stone-500 font-medium text-xs mt-1">
-              Table: <span className="text-orange-600 font-bold">{tableNumber}</span>
+              Table:{" "}
+              <span className="text-orange-600 font-bold">{tableNumber}</span>
             </p>
           </div>
         </div>
 
-        <Link href={`/customer/getbill?table=${tableNumber}`}>
-          <button 
-            className="flex items-center gap-1.5 bg-orange-100/80 text-orange-700 px-3 py-2.5 rounded-xl font-bold text-xs hover:bg-orange-200 transition-colors shadow-sm border border-orange-200/50 active:scale-95 shrink-0"
+        <div className="flex gap-2">
+          {/* NEW CALL WAITER BUTTON */}
+          <button
+            onClick={callWaiter}
+            className="flex items-center gap-1.5 bg-red-50 text-red-600 px-3 py-2.5 rounded-xl font-bold text-xs hover:bg-red-100 transition-colors border border-red-100 active:scale-95"
           >
-            <ReceiptText size={16} />
-            <span className="hidden sm:inline">Get Bill</span>
-            <span className="sm:hidden">Bill</span>
+            <BellRing size={16} />
+            <span>Call Waiter</span>
           </button>
-        </Link>
+
+          <Link href={`/customer/getbill?table=${tableNumber}`}>
+            <button className="flex items-center gap-1.5 bg-orange-100/80 text-orange-700 px-3 py-2.5 rounded-xl font-bold text-xs hover:bg-orange-200 transition-colors border border-orange-200/50 active:scale-95 shrink-0">
+              <ReceiptText size={16} />
+              <span>Bill</span>
+            </button>
+          </Link>
+        </div>
       </header>
 
       <div className="px-4 mb-6">
@@ -144,8 +175,8 @@ export default function MenuPage() {
           </p>
         ) : (
           filteredDishes.map((dish) => {
-            const quantity = getDishQuantity(dish.id); 
-            
+            const quantity = getDishQuantity(dish.id);
+
             return (
               <div
                 key={dish.id}
@@ -167,7 +198,9 @@ export default function MenuPage() {
                     <h3 className="text-sm font-bold leading-tight text-stone-900 line-clamp-2 mb-1">
                       {dish.name}
                     </h3>
-                    <p className="text-orange-600 font-black text-sm">₹{dish.price}</p>
+                    <p className="text-orange-600 font-black text-sm">
+                      ₹{dish.price}
+                    </p>
                   </div>
 
                   <div className="flex justify-between items-end gap-1 mt-auto">
@@ -188,8 +221,8 @@ export default function MenuPage() {
                       </button>
                     ) : (
                       <div className="flex items-center bg-orange-600 text-white rounded-xl p-0.5 shadow-md shadow-orange-200 animate-in fade-in zoom-in-95 duration-200">
-                        <button 
-                          onClick={() => updateQuantity(dish.id, -1)} 
+                        <button
+                          onClick={() => updateQuantity(dish.id, -1)}
                           className="p-1.5 hover:bg-orange-700 rounded-lg transition-colors active:scale-90"
                         >
                           <Minus size={14} strokeWidth={3} />
@@ -197,8 +230,8 @@ export default function MenuPage() {
                         <span className="w-5 text-center font-bold text-xs">
                           {quantity}
                         </span>
-                        <button 
-                          onClick={() => updateQuantity(dish.id, 1)} 
+                        <button
+                          onClick={() => updateQuantity(dish.id, 1)}
                           className="p-1.5 hover:bg-orange-700 rounded-lg transition-colors active:scale-90"
                         >
                           <Plus size={14} strokeWidth={3} />
@@ -225,9 +258,11 @@ export default function MenuPage() {
               </div>
               <div className="flex flex-col">
                 <span className="text-[10px] font-semibold text-orange-200 uppercase tracking-wide leading-none">
-                  {cartCount} {cartCount === 1 ? 'Item' : 'Items'} Added
+                  {cartCount} {cartCount === 1 ? "Item" : "Items"} Added
                 </span>
-                <span className="font-bold text-sm leading-none mt-1">View Order</span>
+                <span className="font-bold text-sm leading-none mt-1">
+                  View Order
+                </span>
               </div>
             </div>
             <div className="bg-white/20 p-2 rounded-xl">
@@ -249,18 +284,18 @@ export default function MenuPage() {
                   ₹{selectedDish.price}
                 </p>
               </div>
-              <button 
+              <button
                 onClick={() => setSelectedDish(null)}
                 className="bg-stone-100 p-2 rounded-full text-stone-500 hover:bg-stone-200 hover:text-stone-900 transition-colors"
               >
                 <X size={20} />
               </button>
             </div>
-            
+
             <p className="text-stone-500 font-medium text-sm leading-relaxed mb-8">
               {selectedDish.description}
             </p>
-            
+
             {getDishQuantity(selectedDish.id) === 0 ? (
               <button
                 onClick={() => addToCart(selectedDish)}
@@ -270,20 +305,22 @@ export default function MenuPage() {
               </button>
             ) : (
               <div className="flex items-center justify-between bg-orange-50 rounded-2xl p-2 border border-orange-100">
-                <button 
-                  onClick={() => updateQuantity(selectedDish.id, -1)} 
+                <button
+                  onClick={() => updateQuantity(selectedDish.id, -1)}
                   className="bg-white text-orange-600 p-3 rounded-xl shadow-sm hover:bg-orange-100 transition-colors active:scale-90"
                 >
                   <Minus size={20} strokeWidth={3} />
                 </button>
                 <div className="flex flex-col items-center">
-                  <span className="text-xs font-bold text-orange-400 uppercase tracking-widest">Quantity</span>
+                  <span className="text-xs font-bold text-orange-400 uppercase tracking-widest">
+                    Quantity
+                  </span>
                   <span className="text-2xl font-black text-stone-900">
                     {getDishQuantity(selectedDish.id)}
                   </span>
                 </div>
-                <button 
-                  onClick={() => updateQuantity(selectedDish.id, 1)} 
+                <button
+                  onClick={() => updateQuantity(selectedDish.id, 1)}
                   className="bg-orange-600 text-white p-3 rounded-xl shadow-md shadow-orange-200 hover:bg-orange-700 transition-colors active:scale-90"
                 >
                   <Plus size={20} strokeWidth={3} />

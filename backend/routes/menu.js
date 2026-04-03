@@ -72,4 +72,21 @@ router.get("/items", async (req, res) => {
   }
 });
 
+// Call Waiter from Customer side
+router.patch("/call-waiter", async (req, res) => {
+  const { tableNumber } = req.body;
+  try {
+    const { error } = await supabase
+      .from("table_sessions")
+      .update({ needs_waiter: true })
+      .eq("table_number", tableNumber)
+      .eq("status", "active");
+
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to call waiter" });
+  }
+});
+
 export default router;

@@ -1,17 +1,21 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { 
   BellRing, 
   LayoutGrid, 
   CheckCircle2, 
   Utensils, 
-  ArrowRight,
-  Clock
+  Clock,
+  UserCheck,
+  X,
+  ChefHat,
+  ChevronRight,
+  Hand
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
-// Interface for items sitting in the kitchen waiting to be run to the table
+// --- INTERFACES ---
 interface ReadyItem {
   id: string;
   name: string;
@@ -20,36 +24,52 @@ interface ReadyItem {
   serveNumber: number;
 }
 
+interface TableStatus {
+  number: number;
+  isOccupied: boolean;
+  needsHelp: boolean;
+}
+
+interface OrderSummaryItem {
+  name: string;
+  quantity: number;
+  status: string;
+  serve: number;
+  notes?: string;
+}
+
 export default function WaiterDashboard() {
   const [activeTab, setActiveTab] = useState<"tasks" | "tables">("tasks");
   const [readyItems, setReadyItems] = useState<ReadyItem[]>([]);
+  const [floorTables, setFloorTables] = useState<TableStatus[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Modal State
+  const [selectedTable, setSelectedTable] = useState<number | null>(null);
+  const [tableOrders, setTableOrders] = useState<OrderSummaryItem[]>([]);
+  const [isModalLoading, setIsModalLoading] = useState(false);
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
   const router = useRouter();
 
-  // Protect the route and Check Shift Expiry
+  // --- 1. AUTH PROTECTION ---
   useEffect(() => {
     const role = localStorage.getItem("staff_role");
     const expiry = localStorage.getItem("staff_expiry");
     const currentTime = new Date().getTime();
 
-    // Check if role is wrong, OR if expiry is missing, OR if 8 hours have passed
     if (role !== "waiter" || !expiry || currentTime > parseInt(expiry)) {
-      
-      // Wipe the expired data
       localStorage.removeItem("staff_role");
       localStorage.removeItem("staff_id");
       localStorage.removeItem("staff_name");
       localStorage.removeItem("staff_expiry");
-      
-      // Kick them out to the login page
       router.push("/login");
     }
   }, [router]);
 
-  // 1. Fetch items that the Kitchen has marked as 'ready'
-  const fetchTasks = async () => {
+  // --- 2. DATA FETCHING ---
+
+  const fetchTasks = useCallback(async () => {
     try {
       const res = await fetch(`${apiUrl}/admin/waiter/tasks`);
       if (res.ok) {
@@ -61,19 +81,51 @@ export default function WaiterDashboard() {
     } finally {
       setLoading(false);
     }
+  }, [apiUrl]);
+
+  const fetchFloorPlan = useCallback(async () => {
+    try {
+      const res = await fetch(`${apiUrl}/admin/waiter/floor-plan`);
+      if (res.ok) {
+        const data = await res.json();
+        setFloorTables(data.tables);
+      }
+    } catch (err) {
+      console.error("Failed to fetch floor plan", err);
+    }
+  }, [apiUrl]);
+
+  const viewTableDetails = async (tableNum: number, isOccupied: boolean) => {
+    if (!isOccupied) return;
+    
+    setSelectedTable(tableNum);
+    setIsModalLoading(true);
+    try {
+      const res = await fetch(`${apiUrl}/admin/waiter/table-details/${tableNum}`);
+      if (res.ok) {
+        const data = await res.json();
+        setTableOrders(data.items);
+      }
+    } catch (err) {
+      console.error("Error fetching table items", err);
+    } finally {
+      setIsModalLoading(false);
+    }
   };
 
   useEffect(() => {
     fetchTasks();
-    const interval = setInterval(fetchTasks, 3000); // Live poll every 3 seconds
+    fetchFloorPlan();
+    const interval = setInterval(() => {
+      fetchTasks();
+      fetchFloorPlan();
+    }, 3000);
     return () => clearInterval(interval);
-  }, []);
+  }, [fetchTasks, fetchFloorPlan]);
 
-  // 2. Mark an item as 'served' once the waiter drops it at the table
+  // --- 3. ACTIONS ---
   const markAsServed = async (itemId: string) => {
-    // Optimistic UI update: instantly remove it from the screen
     setReadyItems((prev) => prev.filter((item) => item.id !== itemId));
-
     try {
       await fetch(`${apiUrl}/admin/waiter/update-item`, {
         method: "PATCH",
@@ -82,11 +134,24 @@ export default function WaiterDashboard() {
       });
     } catch (err) {
       console.error("Failed to mark item as served", err);
-      fetchTasks(); // Revert if it failed
+      fetchTasks();
     }
   };
 
-  // Group the ready items by Table Number so the waiter can grab a tray for one table
+  const attendTable = async (e: React.MouseEvent, tableNumber: number) => {
+    e.stopPropagation(); // Critical: Prevents the background table click from opening order modal
+    try {
+      const res = await fetch(`${apiUrl}/admin/waiter/attend-table`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tableNumber }),
+      });
+      if (res.ok) fetchFloorPlan();
+    } catch (err) {
+      console.error("Failed to attend table", err);
+    }
+  };
+
   const groupedTasks = readyItems.reduce((acc, item) => {
     if (!acc[item.tableNumber]) acc[item.tableNumber] = [];
     acc[item.tableNumber].push(item);
@@ -105,8 +170,8 @@ export default function WaiterDashboard() {
   return (
     <div className="min-h-screen bg-stone-50 text-stone-900 pb-24 font-sans">
       
-      {/* Mobile Header */}
-      <header className="bg-white px-5 py-6 shadow-sm border-b border-stone-100 sticky top-0 z-10">
+      {/* Header */}
+      <header className="bg-white px-5 py-6 shadow-sm border-b border-stone-100 sticky top-0 z-20">
         <div className="flex justify-between items-center">
           <div>
             <h1 className="text-2xl font-black tracking-tight text-stone-900">
@@ -124,33 +189,32 @@ export default function WaiterDashboard() {
         </div>
       </header>
 
-      {/* Main Content Area */}
+      {/* Main Content */}
       <main className="p-4 sm:p-6 max-w-md mx-auto w-full">
         
-        {/* --- TAB 1: SERVICE TASKS (Food ready to be delivered) --- */}
+        {/* --- TAB 1: SERVICE TASKS --- */}
         {activeTab === "tasks" && (
-          <div className="space-y-6">
+          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
             {Object.keys(groupedTasks).length === 0 ? (
               <div className="flex flex-col items-center justify-center pt-20 text-center">
                 <div className="w-20 h-20 bg-green-50 rounded-full flex items-center justify-center mb-4">
                   <CheckCircle2 size={32} className="text-green-500" />
                 </div>
-                <h2 className="text-xl font-black text-stone-900">You're all caught up!</h2>
-                <p className="text-sm text-stone-500 mt-2">No food is waiting in the kitchen right now.</p>
+                <h2 className="text-xl font-black text-stone-900">All Clear!</h2>
+                <p className="text-sm text-stone-500 mt-2">No food is waiting in the kitchen.</p>
               </div>
             ) : (
               Object.entries(groupedTasks).map(([tableNum, items]) => (
                 <div key={tableNum} className="bg-white rounded-3xl p-5 shadow-sm border border-stone-100">
                   <div className="flex justify-between items-center mb-4 border-b border-stone-100 pb-3">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-orange-600 rounded-full flex items-center justify-center text-white font-black text-lg shadow-md shadow-orange-200">
+                      <div className="w-10 h-10 bg-orange-600 rounded-full flex items-center justify-center text-white font-black text-lg shadow-md">
                         {tableNum}
                       </div>
                       <h3 className="font-bold text-stone-900">Table {tableNum}</h3>
                     </div>
                     <div className="flex items-center text-xs font-bold text-orange-500 bg-orange-50 px-2.5 py-1 rounded-md">
-                      <Clock size={12} className="mr-1" />
-                      Ready
+                      <Clock size={12} className="mr-1" /> Ready
                     </div>
                   </div>
 
@@ -166,7 +230,7 @@ export default function WaiterDashboard() {
                         </div>
                         <button
                           onClick={() => markAsServed(item.id)}
-                          className="w-10 h-10 bg-stone-900 text-white rounded-xl flex items-center justify-center active:scale-90 transition-transform shadow-md shrink-0"
+                          className="w-10 h-10 bg-stone-900 text-white rounded-xl flex items-center justify-center active:scale-90 transition-transform shadow-md"
                         >
                           <CheckCircle2 size={18} strokeWidth={3} />
                         </button>
@@ -179,45 +243,137 @@ export default function WaiterDashboard() {
           </div>
         )}
 
-        {/* --- TAB 2: FLOOR PLAN (Placeholder for seeing all tables) --- */}
+        {/* --- TAB 2: FLOOR PLAN --- */}
         {activeTab === "tables" && (
-          <div className="flex flex-col items-center justify-center pt-20 text-center text-stone-500">
-            <LayoutGrid size={48} className="mb-4 opacity-20" />
-            <h2 className="text-xl font-bold text-stone-900 mb-2">Floor Plan View</h2>
-            <p className="text-sm px-6">
-              Use this tab to check which tables are empty, occupied, or waiting for the bill.
-              <br/><br/>
-              (You can fetch the exact same data here as the Cashier Dashboard!)
-            </p>
+          <div className="animate-in fade-in duration-500">
+            <div className="grid grid-cols-3 gap-4">
+              {floorTables.map((table) => (
+                <div 
+                  key={table.number}
+                  onClick={() => viewTableDetails(table.number, table.isOccupied)}
+                  className={`
+                    relative aspect-square rounded-3xl flex flex-col items-center justify-center border-2 transition-all duration-300 cursor-pointer
+                    ${table.needsHelp 
+                      ? "bg-red-50 border-red-500 animate-pulse shadow-lg shadow-red-100" 
+                      : table.isOccupied 
+                        ? "bg-orange-50 border-orange-200 shadow-sm active:scale-95" 
+                        : "bg-white border-stone-100 opacity-60 cursor-default"}
+                  `}
+                >
+                  <span className={`text-2xl font-black ${table.needsHelp ? "text-red-600" : table.isOccupied ? "text-orange-600" : "text-stone-300"}`}>
+                    {table.number}
+                  </span>
+                  
+                  {table.needsHelp ? (
+                    <button 
+                      onClick={(e) => attendTable(e, table.number)}
+                      className="mt-2 bg-red-600 text-white px-2 py-1 rounded-lg text-[8px] font-black uppercase flex items-center gap-1 shadow-lg shadow-red-200 active:scale-90 transition-transform"
+                    >
+                      <Hand size={10} /> Attended
+                    </button>
+                  ) : (
+                    <div className="flex items-center gap-1 mt-1">
+                      {table.isOccupied && <UserCheck size={10} className="text-orange-400" />}
+                      <span className={`text-[10px] font-bold uppercase tracking-tighter ${table.isOccupied ? "text-orange-400" : "text-stone-300"}`}>
+                        {table.isOccupied ? "Active" : "Vacant"}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-10 p-4 bg-white rounded-2xl border border-stone-100 shadow-sm flex justify-around text-[10px] font-bold uppercase tracking-wider">
+              <div className="flex items-center gap-2"><div className="w-3 h-3 bg-stone-200 rounded-full"></div> Available</div>
+              <div className="flex items-center gap-2"><div className="w-3 h-3 bg-orange-500 rounded-full"></div> Occupied</div>
+              <div className="flex items-center gap-2"><div className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div> Alert</div>
+            </div>
           </div>
         )}
       </main>
 
-      {/* Mobile Bottom Navigation Bar */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-stone-100 pb-safe pt-2 px-6 shadow-[0_-10px_40px_rgba(0,0,0,0.03)] z-30">
+      {/* --- MODAL: TABLE DETAILS --- */}
+      {selectedTable && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-stone-900/60 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white w-full max-w-md rounded-t-[2.5rem] sm:rounded-3xl p-6 sm:p-8 shadow-2xl animate-in slide-in-from-bottom-10 duration-300">
+            
+            <div className="flex justify-between items-start mb-6">
+              <div>
+                <h2 className="text-3xl font-black text-stone-900 italic">Table {selectedTable}</h2>
+                <p className="text-xs font-bold text-orange-500 uppercase tracking-widest mt-1">Order Summary</p>
+              </div>
+              <button 
+                onClick={() => setSelectedTable(null)}
+                className="bg-stone-100 p-2 rounded-full text-stone-400"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="max-h-[50vh] overflow-y-auto space-y-4 pr-1">
+              {isModalLoading ? (
+                <div className="py-12 flex flex-col items-center text-stone-300">
+                  <ChefHat size={40} className="animate-bounce mb-2" />
+                  <p className="font-bold">Fetching kitchen tickets...</p>
+                </div>
+              ) : (
+                tableOrders.map((item, idx) => (
+                  <div key={idx} className="flex justify-between items-center p-4 bg-stone-50 rounded-2xl border border-stone-100">
+                    <div className="flex gap-4">
+                      <span className="font-black text-orange-600 text-lg">{item.quantity}x</span>
+                      <div>
+                        <p className="font-bold text-stone-800 leading-tight">{item.name}</p>
+                        <div className="flex gap-2 items-center mt-1">
+                          <span className="text-[9px] font-black uppercase bg-stone-200 px-1.5 py-0.5 rounded text-stone-500">Serve {item.serve}</span>
+                          {item.notes && <span className="text-[10px] text-stone-400 italic">"{item.notes}"</span>}
+                        </div>
+                      </div>
+                    </div>
+                    <div className={`text-[9px] font-black uppercase px-2 py-1 rounded-full ${
+                      item.status === 'served' ? 'bg-green-100 text-green-600' : 'bg-orange-100 text-orange-600 animate-pulse'
+                    }`}>
+                      {item.status}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <button 
+              onClick={() => setSelectedTable(null)}
+              className="w-full mt-8 bg-stone-900 text-white py-4 rounded-2xl font-black shadow-lg active:scale-95 transition-transform flex items-center justify-center gap-2"
+            >
+              Back to Floor <ChevronRight size={18} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Navigation - Fixed conflict by removing 'inline-flex' and using 'flex' consistently */}
+      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-stone-100 pb-safe pt-2 px-6 shadow-[0_-10px_40px_rgba(0,0,0,0.03)] z-30">
         <div className="flex justify-around max-w-md mx-auto">
           <button 
             onClick={() => setActiveTab("tasks")}
-            className={`flex flex-col items-center p-2 min-w-20 transition-colors ${activeTab === "tasks" ? "text-orange-600" : "text-stone-400 hover:text-stone-600"}`}
+            className={`flex flex-col items-center p-2 transition-colors ${activeTab === "tasks" ? "text-orange-600" : "text-stone-400"}`}
           >
-            <div className="relative mb-1">
+            <div className="relative mb-1 flex items-center justify-center">
               <BellRing size={24} strokeWidth={activeTab === "tasks" ? 2.5 : 2} />
-              {readyItems.length > 0 && (
-                <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 border-2 border-white rounded-full"></span>
-              )}
+              {readyItems.length > 0 && <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 border-2 border-white rounded-full"></span>}
             </div>
             <span className="text-[10px] font-bold uppercase tracking-widest">Tasks</span>
           </button>
           
           <button 
             onClick={() => setActiveTab("tables")}
-            className={`flex flex-col items-center p-2 min-w-20 transition-colors ${activeTab === "tables" ? "text-orange-600" : "text-stone-400 hover:text-stone-600"}`}
+            className={`flex flex-col items-center p-2 transition-colors ${activeTab === "tables" ? "text-orange-600" : "text-stone-400"}`}
           >
-            <LayoutGrid size={24} className="mb-1" strokeWidth={activeTab === "tables" ? 2.5 : 2} />
+            <div className="mb-1 flex items-center justify-center">
+              <LayoutGrid size={24} strokeWidth={activeTab === "tables" ? 2.5 : 2} />
+            </div>
             <span className="text-[10px] font-bold uppercase tracking-widest">Floor</span>
           </button>
         </div>
-      </div>
+      </nav>
 
     </div>
   );
