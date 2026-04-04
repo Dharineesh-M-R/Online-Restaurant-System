@@ -4,11 +4,10 @@ import supabase from "../supabase.js";
 const router = express.Router();
 
 // 1. Fetch live kitchen orders (Tickets)
-// Updated to EXCLUDE 'waiting_confirmation' items
 router.get("/orders", async (req, res) => {
   try {
-    // We only fetch items that have been confirmed by a waiter (status: pending)
-    // or are already being worked on (preparing/ready).
+    // This query is where your database schema shines!
+    // We fetch items that aren't served yet, and pull all their parent data at the same time.
     const { data: orderItems, error } = await supabase
       .from("order_items")
       .select(`
@@ -29,15 +28,16 @@ router.get("/orders", async (req, res) => {
           )
         )
       `)
-      .in("status", ["pending", "preparing", "ready"]); 
+      .in("status", ["pending", "preparing", "ready"]); // We don't need 'served' items in the kitchen
 
     if (error) throw error;
 
-    // Group the flat list of items into "Tickets" by serveId
+    // We get a flat list of items from the DB, but our KDS frontend expects them grouped into "Tickets".
+    // Let's group them by serve_id!
     const ticketsMap = {};
 
     orderItems.forEach((item) => {
-      // Safety check for relations
+      // Safety check just in case there's bad data
       if (!item.order_serves || !item.order_serves.orders || !item.order_serves.orders.tables) return;
 
       const serveId = item.order_serves.id;
@@ -62,7 +62,7 @@ router.get("/orders", async (req, res) => {
       });
     });
 
-    // Convert map to array and sort by oldest order first
+    // Convert our grouped map into an array, and sort it so the oldest orders are at the top!
     const tickets = Object.values(ticketsMap).sort(
       (a, b) => new Date(a.orderTime).getTime() - new Date(b.orderTime).getTime()
     );
@@ -74,7 +74,7 @@ router.get("/orders", async (req, res) => {
   }
 });
 
-// 2. Update a specific item's cooking status (e.g., Pending -> Preparing -> Ready)
+// 2. Update a specific item's cooking status (Pending -> Preparing -> Ready)
 router.patch("/update-item", async (req, res) => {
   const { itemId, status } = req.body;
 

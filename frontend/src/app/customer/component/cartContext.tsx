@@ -58,7 +58,7 @@ interface CartContextType {
 // --- GPS MATH HELPERS ---
 const RESTAURANT_LAT = parseFloat(process.env.NEXT_PUBLIC_LATITUDE || "0");
 const RESTAURANT_LNG = parseFloat(process.env.NEXT_PUBLIC_LONGITUDE || "0");
-const MAX_DISTANCE_METERS = 100;
+const MAX_DISTANCE_METERS = 100; 
 
 function getDistanceFromLatLonInM(
   lat1: number,
@@ -66,7 +66,7 @@ function getDistanceFromLatLonInM(
   lat2: number,
   lon2: number,
 ) {
-  const R = 6371000;
+  const R = 6371000; 
   const dLat = (lat2 - lat1) * (Math.PI / 180);
   const dLon = (lon2 - lon1) * (Math.PI / 180);
   const a =
@@ -109,7 +109,7 @@ function CartProviderInner({ children }: { children: ReactNode }) {
 
     // 🚨 GPS DISABLED FOR LOCAL TESTING
     // (To turn GPS back on for production, just delete the next two lines!)
-    setIsLocationValid(true);
+    setIsLocationValid(true); 
     return;
 
     if (!("geolocation" in navigator)) {
@@ -128,12 +128,12 @@ function CartProviderInner({ children }: { children: ReactNode }) {
         );
 
         if (distance <= MAX_DISTANCE_METERS) {
-          setIsLocationValid(true);
+          setIsLocationValid(true); 
         } else {
           setLocationMessage(
             `You are ${Math.round(distance)} meters away. You must be inside the restaurant to place an order.`,
           );
-          setIsLocationValid(false);
+          setIsLocationValid(false); 
         }
       },
       (error) => {
@@ -182,8 +182,8 @@ function CartProviderInner({ children }: { children: ReactNode }) {
               "Previous session was closed. Preventing ghost session creation.",
             );
             clearCart();
-            window.location.replace("/");
-            return;
+            window.location.replace("/"); 
+            return; 
           }
         } catch (err) {
           console.error("Verification ping failed", err);
@@ -311,22 +311,14 @@ function CartProviderInner({ children }: { children: ReactNode }) {
     );
     const newServeNum = serveCount + 1;
 
-    // We map the cart items to include the 'waiting_confirmation' status
-    // This ensures the items sit in the "Waiter Review" stage before hitting the kitchen.
-    const itemsWithStatus = cart.map((item) => ({
-      ...item,
-      status: "waiting_confirmation",
-    }));
-
     const newServe: PlacedServe = {
       serveNumber: newServeNum,
-      items: itemsWithStatus, // Use the updated items array
+      items: [...cart],
       serveTotal: serveTotal,
       sessionId: sessionId,
     };
 
     try {
-      // Optimistic UI updates
       setPlacedServes((prev) => [...prev, newServe]);
       setServeCount(newServeNum);
       setCart([]);
@@ -334,11 +326,10 @@ function CartProviderInner({ children }: { children: ReactNode }) {
       await fetch(`${apiUrl}/sessions/${sessionId}/orders`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newServe), // Sending status: 'waiting_confirmation'
+        body: JSON.stringify(newServe),
       });
     } catch (err) {
       console.error("Order Placement Error:", err);
-      // Optionally: Revert UI state if the request fails
     }
   };
 
