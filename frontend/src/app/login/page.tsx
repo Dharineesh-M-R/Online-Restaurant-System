@@ -34,10 +34,15 @@ export default function LoginPage() {
         throw new Error(data.error || "Login failed");
       }
 
-      // Save the real credentials to LocalStorage
+      // --- 8-HOUR SHIFT TIMER LOGIC ---
+      const SHIFT_DURATION_MS = 8 * 60 * 60 * 1000; // 8 hours in milliseconds
+      const expiryTime = new Date().getTime() + SHIFT_DURATION_MS;
+
+      // Save the real credentials AND the expiry time to LocalStorage
       localStorage.setItem("staff_role", data.role);
       localStorage.setItem("staff_id", data.employeeId);
       localStorage.setItem("staff_name", data.name);
+      localStorage.setItem("staff_expiry", expiryTime.toString());
 
       // Route them dynamically based on what the database told us!
       if (data.role === "waiter") router.push("/waiter");

@@ -9,8 +9,6 @@ router.get("/", async (req, res) => {
   if (!table) return res.status(400).json({ error: "Table number is required" });
 
   try {
-    // FIX: Look for ANY session that is not "completed". 
-    // This catches "active", "billed", "billed_cash", etc. preventing Ghost Sessions!
     const { data: activeSession, error: fetchError } = await supabase
       .from("table_sessions")
       .select("session_id, cart_items")
@@ -20,12 +18,10 @@ router.get("/", async (req, res) => {
 
     if (fetchError) throw fetchError;
 
-    // If a session exists (even if it's currently waiting for a bill), return it!
     if (activeSession) {
       return res.json({ sessionId: activeSession.session_id, cart: activeSession.cart_items || [] });
     }
 
-    // Only create a brand new session if no active/billed sessions exist
     const newSessionId = `sess_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
     const { error: insertError } = await supabase
       .from("table_sessions")
@@ -45,7 +41,6 @@ router.get("/:sessionId/sync", async (req, res) => {
   const { sessionId } = req.params;
 
   try {
-    // A. Get the Shared Cart & Table Number
     const { data: sessionData, error: sessionErr } = await supabase
       .from("table_sessions")
       .select("table_number, cart_items")
@@ -55,7 +50,6 @@ router.get("/:sessionId/sync", async (req, res) => {
 
     if (sessionErr || !sessionData) return res.status(404).json({ error: "Session not found" });
 
-    // B. Get the Table UUID
     const { data: tableInfo, error: tableErr } = await supabase
       .from("tables")
       .select("id")
@@ -64,7 +58,6 @@ router.get("/:sessionId/sync", async (req, res) => {
 
     if (tableErr) throw tableErr;
 
-    // C. Get the Active Order and all its serves & items
     const { data: activeOrder, error: orderErr } = await supabase
       .from("orders")
       .select(`
@@ -77,12 +70,13 @@ router.get("/:sessionId/sync", async (req, res) => {
             quantity,
             price,
             notes,
+            status,
             menu_items (name)
           )
         )
       `)
       .eq("table_id", tableInfo.id)
-      .eq("session_id", sessionId) // Strict match to this specific session
+      .eq("session_id", sessionId)
       .neq("order_status", "completed")
       .neq("order_status", "cancelled")
       .order("created_at", { ascending: false })
@@ -91,32 +85,38 @@ router.get("/:sessionId/sync", async (req, res) => {
 
     if (orderErr) throw orderErr;
 
-    // Reconstruct the data into the format the frontend expects
     const formattedServes = [];
     if (activeOrder && activeOrder.order_serves) {
       for (const serve of activeOrder.order_serves) {
         let serveTotal = 0;
-        const formattedItems = serve.order_items.map(item => {
-          serveTotal += Number(item.price) * item.quantity;
-          return {
-            id: item.menu_item_id, // This is the UUID
-            name: item.menu_items?.name || "Unknown Item",
-            price: item.price,
-            quantity: item.quantity,
-            notes: item.notes
-          };
-        });
+        
+        // Filter out items that might have been deleted by the waiter, then format
+        const formattedItems = serve.order_items
+          .filter(item => item !== null) // Safety check
+          .map(item => {
+            serveTotal += Number(item.price) * item.quantity;
+            return {
+              id: item.menu_item_id, 
+              name: item.menu_items?.name || "Unknown Item",
+              price: item.price,
+              quantity: item.quantity,
+              notes: item.notes,
+              status: item.status // LIVE STATUS SENT TO FRONTEND!
+            };
+          });
 
-        formattedServes.push({
-          serveNumber: serve.serve_number,
-          items: formattedItems,
-          serveTotal: serveTotal,
-          sessionId: sessionId
-        });
+        // Only push the serve if it actually has items (waiter might have deleted a whole round)
+        if (formattedItems.length > 0) {
+          formattedServes.push({
+            serveNumber: serve.serve_number,
+            items: formattedItems,
+            serveTotal: serveTotal,
+            sessionId: sessionId
+          });
+        }
       }
     }
 
-    // Sort serves by number just to be safe
     formattedServes.sort((a, b) => a.serveNumber - b.serveNumber);
 
     res.json({
@@ -149,13 +149,12 @@ router.patch("/:sessionId/cart", async (req, res) => {
   }
 });
 
-// 4. Place a New Order (NORMALIZED WORKFLOW)
+// 4. Place a New Order
 router.post("/:sessionId/orders", async (req, res) => {
   const { sessionId } = req.params;
   const { serveNumber, items, serveTotal } = req.body;
 
   try {
-    // A. Get the Table Info
     const { data: session, error: sessionErr } = await supabase
       .from("table_sessions")
       .select("table_number")
@@ -170,13 +169,12 @@ router.post("/:sessionId/orders", async (req, res) => {
       .single();
     if (tableErr) throw tableErr;
 
-    // B. Find an active Order, or create one
     let orderId;
     const { data: existingOrder, error: orderFetchErr } = await supabase
       .from("orders")
       .select("id, serve_count, total_amount")
       .eq("table_id", tableInfo.id)
-      .eq("session_id", sessionId) // Bind strictly to this session
+      .eq("session_id", sessionId)
       .neq("order_status", "completed")
       .neq("order_status", "cancelled")
       .order("created_at", { ascending: false })
@@ -187,7 +185,6 @@ router.post("/:sessionId/orders", async (req, res) => {
 
     if (existingOrder) {
       orderId = existingOrder.id;
-      // Update the total and serve count of the master order
       const { error: updateErr } = await supabase
         .from("orders")
         .update({
@@ -198,7 +195,6 @@ router.post("/:sessionId/orders", async (req, res) => {
       
       if (updateErr) throw updateErr;
     } else {
-      // Create a brand new order for the table and link the session_id
       const { data: newOrder, error: newOrderErr } = await supabase
         .from("orders")
         .insert([{
@@ -206,7 +202,7 @@ router.post("/:sessionId/orders", async (req, res) => {
           session_id: sessionId, 
           total_amount: serveTotal,
           serve_count: 1,
-          order_status: "pending"
+          order_status: "pending" 
         }])
         .select("id")
         .single();
@@ -215,7 +211,6 @@ router.post("/:sessionId/orders", async (req, res) => {
       orderId = newOrder.id;
     }
 
-    // C. Create the Order Serve (Let Supabase generate the UUID, then we fetch it back)
     const { data: newServe, error: serveErr } = await supabase
       .from("order_serves")
       .insert([{
@@ -229,14 +224,13 @@ router.post("/:sessionId/orders", async (req, res) => {
     if (serveErr) throw serveErr;
     const serveId = newServe.id;
 
-    // D. Insert the Individual Items
     const orderItemsData = items.map(item => ({
-      menu_item_id: item.id, // Must be the UUID from your menu_items table
+      menu_item_id: item.id,
       quantity: item.quantity,
       price: item.price,
       serve_id: serveId,
       notes: item.notes || null,
-      status: "pending"
+      status: item.status || "waiting_confirmation"
     }));
 
     const { error: itemsErr } = await supabase
@@ -245,7 +239,6 @@ router.post("/:sessionId/orders", async (req, res) => {
     
     if (itemsErr) throw itemsErr;
 
-    // E. Clear the Shared Cart since it has been successfully placed
     const { error: clearCartErr } = await supabase
       .from("table_sessions")
       .update({ cart_items: [] })
@@ -260,13 +253,12 @@ router.post("/:sessionId/orders", async (req, res) => {
   }
 });
 
-// 5. Request Bill (Alerts the Billing Desk with Payment Method)
+// 5. Request Bill
 router.post("/:sessionId/bill", async (req, res) => {
   const { sessionId } = req.params;
-  const { paymentMethod } = req.body; // <-- Grab the payment method
+  const { paymentMethod } = req.body; 
 
   try {
-    // Append the chosen method to the status (e.g., 'billed_cash')
     const finalStatus = paymentMethod ? `billed_${paymentMethod}` : "billed";
 
     const { error: sessionErr } = await supabase
@@ -283,7 +275,7 @@ router.post("/:sessionId/bill", async (req, res) => {
   }
 });
 
-// 6. Cancel Session (Walk-outs)
+// 6. Cancel Session
 router.post("/:sessionId/cancel", async (req, res) => {
   const { sessionId } = req.params;
 
