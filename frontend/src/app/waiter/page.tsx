@@ -534,7 +534,7 @@ export default function WaiterDashboard() {
 
       {/* --- PAYMENT SELECTION MODAL --- */}
       {showPaymentModal && (
-        <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center z-[60] p-4 transition-opacity">
+        <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center z-60 p-4 transition-opacity">
           <div className="bg-white rounded-[2.5rem] p-6 w-full max-w-sm shadow-2xl animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-200">
             <h3 className="text-xl font-black text-stone-900 mb-1 text-center">Customer Payment</h3>
             <p className="text-stone-500 text-sm text-center mb-6">Select how the customer wants to pay.</p>
