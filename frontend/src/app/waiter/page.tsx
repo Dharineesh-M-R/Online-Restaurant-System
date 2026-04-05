@@ -11,7 +11,11 @@ import {
   X,
   ChefHat,
   ChevronRight,
-  Hand
+  Hand,
+  Trash2,
+  Plus,
+  Minus,
+  Receipt // Imported Receipt icon for the button
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -28,9 +32,11 @@ interface TableStatus {
   number: number;
   isOccupied: boolean;
   needsHelp: boolean;
+  hasUnconfirmed: boolean;
 }
 
 interface OrderSummaryItem {
+  id: string;
   name: string;
   quantity: number;
   status: string;
@@ -67,11 +73,11 @@ export default function WaiterDashboard() {
     }
   }, [router]);
 
-  // --- 2. DATA FETCHING ---
+  // --- 2. DATA FETCHING (CACHE-BUSTED) ---
 
   const fetchTasks = useCallback(async () => {
     try {
-      const res = await fetch(`${apiUrl}/admin/waiter/tasks`);
+      const res = await fetch(`${apiUrl}/admin/waiter/tasks?t=${Date.now()}`, { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
         setReadyItems(data.tasks);
@@ -85,7 +91,7 @@ export default function WaiterDashboard() {
 
   const fetchFloorPlan = useCallback(async () => {
     try {
-      const res = await fetch(`${apiUrl}/admin/waiter/floor-plan`);
+      const res = await fetch(`${apiUrl}/admin/waiter/floor-plan?t=${Date.now()}`, { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
         setFloorTables(data.tables);
@@ -101,7 +107,7 @@ export default function WaiterDashboard() {
     setSelectedTable(tableNum);
     setIsModalLoading(true);
     try {
-      const res = await fetch(`${apiUrl}/admin/waiter/table-details/${tableNum}`);
+      const res = await fetch(`${apiUrl}/admin/waiter/table-details/${tableNum}?t=${Date.now()}`, { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
         setTableOrders(data.items);
@@ -113,6 +119,26 @@ export default function WaiterDashboard() {
     }
   };
 
+  const pollTableDetails = useCallback(async (tableNum: number) => {
+    try {
+      const res = await fetch(`${apiUrl}/admin/waiter/table-details/${tableNum}?t=${Date.now()}`, { cache: "no-store" });
+      if (res.ok) {
+        const data = await res.json();
+        setTableOrders((prevOrders) => {
+          return data.items.map((newItem: OrderSummaryItem) => {
+            const existingLocalItem = prevOrders.find(prev => prev.id === newItem.id);
+            if (existingLocalItem && existingLocalItem.status === 'waiting_confirmation' && newItem.status === 'waiting_confirmation') {
+              return { ...newItem, quantity: existingLocalItem.quantity };
+            }
+            return newItem;
+          });
+        });
+      }
+    } catch (err) {
+      console.error("Error polling table items", err);
+    }
+  }, [apiUrl]);
+
   useEffect(() => {
     fetchTasks();
     fetchFloorPlan();
@@ -123,7 +149,81 @@ export default function WaiterDashboard() {
     return () => clearInterval(interval);
   }, [fetchTasks, fetchFloorPlan]);
 
-  // --- 3. ACTIONS ---
+  useEffect(() => {
+    if (selectedTable !== null) {
+      const modalInterval = setInterval(() => {
+        pollTableDetails(selectedTable);
+      }, 3000);
+      return () => clearInterval(modalInterval);
+    }
+  }, [selectedTable, pollTableDetails]);
+
+
+  // --- 3. ACTIONS & EDITING ---
+
+  const handleQuantityChange = (itemId: string, delta: number) => {
+    setTableOrders(prev => prev.map(item => 
+      (item.id === itemId && item.status === 'waiting_confirmation') 
+        ? { ...item, quantity: Math.max(1, item.quantity + delta) } 
+        : item
+    ));
+  };
+
+  const handleDeleteItem = async (itemId: string) => {
+    try {
+      await fetch(`${apiUrl}/admin/waiter/confirm-items`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items: [{ id: itemId, action: 'delete' }] }),
+      });
+      setTableOrders(prev => prev.filter(item => item.id !== itemId));
+    } catch (err) {
+      console.error("Failed to delete item", err);
+    }
+  };
+
+  const handleConfirmAndSend = async () => {
+    const itemsToConfirm = tableOrders
+      .filter(item => item.status === 'waiting_confirmation')
+      .map(item => ({ id: item.id, quantity: item.quantity, action: 'confirm' }));
+
+    if (itemsToConfirm.length === 0) return;
+
+    try {
+      const res = await fetch(`${apiUrl}/admin/waiter/confirm-items`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items: itemsToConfirm }),
+      });
+
+      if (res.ok) {
+        setSelectedTable(null);
+        fetchFloorPlan(); 
+      }
+    } catch (err) {
+      console.error("Failed to confirm items", err);
+    }
+  };
+
+  // 🔥 NEW: Trigger the Bill Request for the table
+  const handleRequestBill = async () => {
+    if (!selectedTable) return;
+    try {
+      const res = await fetch(`${apiUrl}/admin/waiter/request-bill`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tableNumber: selectedTable }),
+      });
+
+      if (res.ok) {
+        setSelectedTable(null); // Close modal
+        fetchFloorPlan(); // Refresh view
+      }
+    } catch (err) {
+      console.error("Failed to request bill", err);
+    }
+  };
+
   const markAsServed = async (itemId: string) => {
     setReadyItems((prev) => prev.filter((item) => item.id !== itemId));
     try {
@@ -134,12 +234,12 @@ export default function WaiterDashboard() {
       });
     } catch (err) {
       console.error("Failed to mark item as served", err);
-      fetchTasks();
+      fetchTasks(); 
     }
   };
 
   const attendTable = async (e: React.MouseEvent, tableNumber: number) => {
-    e.stopPropagation(); // Critical: Prevents the background table click from opening order modal
+    e.stopPropagation(); 
     try {
       const res = await fetch(`${apiUrl}/admin/waiter/attend-table`, {
         method: "PATCH",
@@ -166,6 +266,13 @@ export default function WaiterDashboard() {
       </div>
     );
   }
+
+  // --- LOGIC GATES FOR BUTTON RENDER ---
+  const hasItemsToConfirm = tableOrders.some(item => item.status === 'waiting_confirmation');
+  
+  // Evaluates to true ONLY if there are items, AND none of them are pending/preparing/waiting
+  const allItemsReadyOrServed = tableOrders.length > 0 && 
+    tableOrders.every(item => item.status === 'ready' || item.status === 'served');
 
   return (
     <div className="min-h-screen bg-stone-50 text-stone-900 pb-24 font-sans">
@@ -253,14 +360,19 @@ export default function WaiterDashboard() {
                   onClick={() => viewTableDetails(table.number, table.isOccupied)}
                   className={`
                     relative aspect-square rounded-3xl flex flex-col items-center justify-center border-2 transition-all duration-300 cursor-pointer
-                    ${table.needsHelp 
-                      ? "bg-red-50 border-red-500 animate-pulse shadow-lg shadow-red-100" 
-                      : table.isOccupied 
-                        ? "bg-orange-50 border-orange-200 shadow-sm active:scale-95" 
-                        : "bg-white border-stone-100 opacity-60 cursor-default"}
+                    ${table.hasUnconfirmed 
+                      ? "bg-blue-50 border-blue-500 animate-pulse shadow-lg shadow-blue-100" 
+                      : table.needsHelp 
+                        ? "bg-red-50 border-red-500 shadow-lg shadow-red-100 animate-pulse" 
+                        : table.isOccupied 
+                          ? "bg-orange-50 border-orange-200 shadow-sm active:scale-95" 
+                          : "bg-white border-stone-100 opacity-60 cursor-default"}
                   `}
                 >
-                  <span className={`text-2xl font-black ${table.needsHelp ? "text-red-600" : table.isOccupied ? "text-orange-600" : "text-stone-300"}`}>
+                  <span className={`text-2xl font-black 
+                    ${table.hasUnconfirmed ? "text-blue-600" : 
+                      table.needsHelp ? "text-red-600" : 
+                      table.isOccupied ? "text-orange-600" : "text-stone-300"}`}>
                     {table.number}
                   </span>
                   
@@ -273,9 +385,11 @@ export default function WaiterDashboard() {
                     </button>
                   ) : (
                     <div className="flex items-center gap-1 mt-1">
-                      {table.isOccupied && <UserCheck size={10} className="text-orange-400" />}
-                      <span className={`text-[10px] font-bold uppercase tracking-tighter ${table.isOccupied ? "text-orange-400" : "text-stone-300"}`}>
-                        {table.isOccupied ? "Active" : "Vacant"}
+                      {table.isOccupied && <UserCheck size={10} className={table.hasUnconfirmed ? "text-blue-400" : "text-orange-400"} />}
+                      <span className={`text-[10px] font-bold uppercase tracking-tighter 
+                        ${table.hasUnconfirmed ? "text-blue-500" : 
+                          table.isOccupied ? "text-orange-400" : "text-stone-300"}`}>
+                        {table.hasUnconfirmed ? "New Order" : table.isOccupied ? "Active" : "Vacant"}
                       </span>
                     </div>
                   )}
@@ -283,16 +397,17 @@ export default function WaiterDashboard() {
               ))}
             </div>
 
-            <div className="mt-10 p-4 bg-white rounded-2xl border border-stone-100 shadow-sm flex justify-around text-[10px] font-bold uppercase tracking-wider">
-              <div className="flex items-center gap-2"><div className="w-3 h-3 bg-stone-200 rounded-full"></div> Available</div>
+            <div className="mt-10 p-4 bg-white rounded-2xl border border-stone-100 shadow-sm flex flex-wrap justify-around gap-y-3 text-[10px] font-bold uppercase tracking-wider">
+              <div className="flex items-center gap-2"><div className="w-3 h-3 bg-stone-200 rounded-full"></div> Vacant</div>
               <div className="flex items-center gap-2"><div className="w-3 h-3 bg-orange-500 rounded-full"></div> Occupied</div>
-              <div className="flex items-center gap-2"><div className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div> Alert</div>
+              <div className="flex items-center gap-2"><div className="w-3 h-3 bg-blue-500 rounded-full animate-pulse"></div> New Order</div>
+              <div className="flex items-center gap-2"><div className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div> Call Waiter</div>
             </div>
           </div>
         )}
       </main>
 
-      {/* --- MODAL: TABLE DETAILS --- */}
+      {/* --- MODAL: TABLE DETAILS & EDITING --- */}
       {selectedTable && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-stone-900/60 backdrop-blur-sm animate-in fade-in">
           <div className="bg-white w-full max-w-md rounded-t-[2.5rem] sm:rounded-3xl p-6 sm:p-8 shadow-2xl animate-in slide-in-from-bottom-10 duration-300">
@@ -304,7 +419,7 @@ export default function WaiterDashboard() {
               </div>
               <button 
                 onClick={() => setSelectedTable(null)}
-                className="bg-stone-100 p-2 rounded-full text-stone-400"
+                className="bg-stone-100 p-2 rounded-full text-stone-400 hover:bg-stone-200 transition-colors"
               >
                 <X size={20} />
               </button>
@@ -314,42 +429,94 @@ export default function WaiterDashboard() {
               {isModalLoading ? (
                 <div className="py-12 flex flex-col items-center text-stone-300">
                   <ChefHat size={40} className="animate-bounce mb-2" />
-                  <p className="font-bold">Fetching kitchen tickets...</p>
+                  <p className="font-bold">Fetching details...</p>
                 </div>
+              ) : tableOrders.length === 0 ? (
+                <div className="py-12 text-center text-stone-400 font-bold uppercase text-xs">No active items</div>
               ) : (
-                tableOrders.map((item, idx) => (
-                  <div key={idx} className="flex justify-between items-center p-4 bg-stone-50 rounded-2xl border border-stone-100">
-                    <div className="flex gap-4">
-                      <span className="font-black text-orange-600 text-lg">{item.quantity}x</span>
-                      <div>
-                        <p className="font-bold text-stone-800 leading-tight">{item.name}</p>
-                        <div className="flex gap-2 items-center mt-1">
-                          <span className="text-[9px] font-black uppercase bg-stone-200 px-1.5 py-0.5 rounded text-stone-500">Serve {item.serve}</span>
-                          {item.notes && <span className="text-[10px] text-stone-400 italic">"{item.notes}"</span>}
+                tableOrders.map((item) => (
+                  <div key={item.id} className={`p-4 rounded-2xl border transition-colors ${item.status === 'waiting_confirmation' ? 'bg-blue-50/50 border-blue-100' : 'bg-stone-50 border-stone-100'}`}>
+                    <div className="flex justify-between items-start">
+                      <div className="flex-1 pr-2">
+                        <div className="flex items-center gap-2">
+                          <p className="font-bold text-stone-800 leading-tight">{item.name}</p>
+                          {item.status === 'waiting_confirmation' && (
+                            <span className="text-[8px] bg-blue-600 text-white px-1.5 py-0.5 rounded font-black uppercase tracking-tighter">New</span>
+                          )}
                         </div>
+                        <p className="text-[10px] font-bold text-stone-400 mt-1 uppercase tracking-tighter">
+                          Serve {item.serve} • Status: <span className={item.status === 'waiting_confirmation' ? 'text-blue-500' : 'text-stone-500'}>{item.status.replace('_', ' ')}</span>
+                        </p>
                       </div>
+
+                      {/* EDITABLE CONTROLS: ONLY FOR WAITING_CONFIRMATION */}
+                      {item.status === 'waiting_confirmation' ? (
+                        <div className="flex items-center gap-3">
+                          <button 
+                            onClick={() => handleDeleteItem(item.id)} 
+                            className="text-red-400 hover:bg-red-50 p-1.5 rounded-lg"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                          <div className="flex items-center bg-white rounded-xl border border-stone-200 p-1">
+                            <button onClick={() => handleQuantityChange(item.id, -1)} className="p-1 text-stone-600 hover:bg-stone-50 rounded-lg">
+                              <Minus size={14} />
+                            </button>
+                            <span className="w-6 text-center font-black text-sm">{item.quantity}</span>
+                            <button onClick={() => handleQuantityChange(item.id, 1)} className="p-1 text-stone-600 hover:bg-stone-50 rounded-lg">
+                              <Plus size={14} />
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-center bg-stone-200 text-stone-600 px-3 py-1.5 rounded-xl font-black text-sm">
+                          {item.quantity}x
+                        </div>
+                      )}
                     </div>
-                    <div className={`text-[9px] font-black uppercase px-2 py-1 rounded-full ${
-                      item.status === 'served' ? 'bg-green-100 text-green-600' : 'bg-orange-100 text-orange-600 animate-pulse'
-                    }`}>
-                      {item.status}
-                    </div>
+                    {item.notes && <p className="mt-2 text-[10px] text-stone-400 italic">"{item.notes}"</p>}
                   </div>
                 ))
               )}
             </div>
 
-            <button 
-              onClick={() => setSelectedTable(null)}
-              className="w-full mt-8 bg-stone-900 text-white py-4 rounded-2xl font-black shadow-lg active:scale-95 transition-transform flex items-center justify-center gap-2"
-            >
-              Back to Floor <ChevronRight size={18} />
-            </button>
+            {/* DYNAMIC ACTION BUTTONS */}
+            {hasItemsToConfirm ? (
+              <button 
+                onClick={handleConfirmAndSend}
+                className="w-full mt-8 bg-stone-900 text-white py-4 rounded-2xl font-black shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2"
+              >
+                Confirm & Send to Kitchen <ChevronRight size={18} />
+              </button>
+            ) : allItemsReadyOrServed ? (
+              <div className="flex gap-3 mt-8">
+                <button 
+                  onClick={() => setSelectedTable(null)}
+                  className="w-1/3 bg-stone-100 text-stone-600 py-4 rounded-2xl font-black active:scale-95 transition-all flex items-center justify-center"
+                >
+                  Back
+                </button>
+                <button 
+                  onClick={handleRequestBill}
+                  className="w-2/3 bg-orange-600 text-white py-4 rounded-2xl font-black shadow-lg shadow-orange-200 active:scale-95 transition-all flex items-center justify-center gap-2"
+                >
+                  <Receipt size={18} /> Request Bill
+                </button>
+              </div>
+            ) : (
+              <button 
+                onClick={() => setSelectedTable(null)}
+                className="w-full mt-8 bg-stone-900 text-white py-4 rounded-2xl font-black shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2"
+              >
+                Back to Floor <ChevronRight size={18} />
+              </button>
+            )}
+
           </div>
         </div>
       )}
 
-      {/* Navigation - Fixed conflict by removing 'inline-flex' and using 'flex' consistently */}
+      {/* Navigation */}
       <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-stone-100 pb-safe pt-2 px-6 shadow-[0_-10px_40px_rgba(0,0,0,0.03)] z-30">
         <div className="flex justify-around max-w-md mx-auto">
           <button 

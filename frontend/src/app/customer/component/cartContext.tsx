@@ -29,6 +29,7 @@ export interface CartItem {
   quantity: number;
   isVeg: boolean;
   notes?: string;
+  status?: string;
 }
 
 export interface PlacedServe {

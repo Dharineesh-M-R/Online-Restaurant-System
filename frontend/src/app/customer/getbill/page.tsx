@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { 
   ArrowLeft, Receipt, CheckCircle2, UtensilsCrossed, 
-  Clock, IndianRupee, CreditCard, Smartphone, Wallet
+  IndianRupee, CreditCard, Smartphone, Wallet, Clock
 } from "lucide-react";
 import { useCart } from "../component/cartContext";
 
@@ -17,7 +17,7 @@ export default function BillPage() {
   const [isBillRequested, setIsBillRequested] = useState(false);
   const [selectedMethod, setSelectedMethod] = useState<string | null>(null);
 
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://172.18.170.244:5000";
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
   if (!isLoaded) {
     return (
@@ -30,10 +30,18 @@ export default function BillPage() {
     );
   }
 
+  // Calculate live totals
   const subtotal = placedServes.reduce((acc, serve) => acc + serve.serveTotal, 0);
   const gst = Math.round(subtotal * 0.05);
   const platformFee = 15;
   const grandTotal = subtotal > 0 ? subtotal + gst + platformFee : 0;
+
+  // 🔥 NEW LOGIC: Check if ALL items are ready or served
+  const allItems = placedServes.flatMap(serve => serve.items);
+  const hasItems = allItems.length > 0;
+  const allReadyOrServed = hasItems && allItems.every(
+    item => item.status === 'ready' || item.status === 'served'
+  );
 
   // Triggered when they select a payment method in the modal
   const handleRequestBill = async (method: string) => {
@@ -43,7 +51,6 @@ export default function BillPage() {
     setSelectedMethod(method);
     
     try {
-      // Send the selected payment method to the backend
       const res = await fetch(`${apiUrl}/sessions/${sessionId}/bill`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -65,6 +72,25 @@ export default function BillPage() {
       setSelectedMethod(null);
     } finally {
       setIsRequesting(false);
+    }
+  };
+
+  // Helper to color-code statuses dynamically
+  const getStatusBadge = (status: string | undefined) => {
+    if (!status) return null;
+    
+    switch(status) {
+      case "waiting_confirmation":
+        return <span className="text-[8px] bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded uppercase font-black">Waiting</span>;
+      case "pending":
+      case "preparing":
+        return <span className="text-[8px] bg-orange-100 text-orange-600 px-1.5 py-0.5 rounded uppercase font-black">Preparing</span>;
+      case "ready":
+        return <span className="text-[8px] bg-green-100 text-green-600 px-1.5 py-0.5 rounded uppercase font-black animate-pulse">Ready</span>;
+      case "served":
+        return <span className="text-[8px] bg-stone-200 text-stone-500 px-1.5 py-0.5 rounded uppercase font-black">Served</span>;
+      default:
+        return null;
     }
   };
 
@@ -118,7 +144,10 @@ export default function BillPage() {
                           <div className="flex gap-3 flex-1">
                             <span className="font-bold text-stone-900 w-6">{item.quantity}x</span>
                             <div>
-                              <h3 className="font-bold text-stone-700 leading-tight">{item.name}</h3>
+                              <div className="flex items-center gap-2">
+                                <h3 className="font-bold text-stone-700 leading-tight">{item.name}</h3>
+                                {getStatusBadge(item.status)}
+                              </div>
                               {item.notes && <p className="text-[10px] text-stone-400 mt-1 uppercase tracking-wider">Note: {item.notes}</p>}
                             </div>
                           </div>
@@ -158,16 +187,27 @@ export default function BillPage() {
       {placedServes.length > 0 && (
         <div className="fixed bottom-0 left-0 right-0 bg-white p-4 pb-safe border-t border-stone-100 shadow-[0_-10px_40px_rgba(0,0,0,0.05)] z-30">
           <div className="max-w-md mx-auto">
+            {/* Warning Message if food is still cooking */}
+            {!allReadyOrServed && !isBillRequested && (
+              <p className="text-[10px] text-center text-orange-600 font-bold uppercase mb-2 tracking-widest">
+                You can request the bill when all items are ready or served
+              </p>
+            )}
+            
             <button 
-              onClick={() => !isBillRequested && setShowPaymentModal(true)} 
-              disabled={isRequesting || isBillRequested} 
+              onClick={() => !isBillRequested && allReadyOrServed && setShowPaymentModal(true)} 
+              disabled={isRequesting || isBillRequested || !allReadyOrServed} 
               className={`py-4 rounded-2xl font-bold text-lg w-full shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-2
-                ${isBillRequested ? "bg-green-100 text-green-700 shadow-none cursor-not-allowed" : "bg-orange-600 text-white shadow-orange-200 disabled:opacity-70"}`}
+                ${isBillRequested ? "bg-green-100 text-green-700 shadow-none cursor-not-allowed" : 
+                  !allReadyOrServed ? "bg-stone-200 text-stone-500 shadow-none cursor-not-allowed" : 
+                  "bg-orange-600 text-white shadow-orange-200 disabled:opacity-70"}`}
             >
               {isRequesting ? (
                 <><div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" /> Alerting Cashier...</>
               ) : isBillRequested ? (
                 <><CheckCircle2 size={20} /> Waiter bringing {selectedMethod?.toUpperCase()} bill</>
+              ) : !allReadyOrServed ? (
+                <><Clock size={20} /> Food is being prepared...</>
               ) : (
                 <><Receipt size={20} /> Request Bill</>
               )}
