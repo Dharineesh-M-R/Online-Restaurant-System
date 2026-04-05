@@ -202,7 +202,7 @@ router.post("/:sessionId/orders", async (req, res) => {
           session_id: sessionId, 
           total_amount: serveTotal,
           serve_count: 1,
-          order_status: "waiting_confirmation" 
+          order_status: "pending" 
         }])
         .select("id")
         .single();

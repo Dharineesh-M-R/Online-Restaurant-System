@@ -205,8 +205,9 @@ router.patch("/attend-table", async (req, res) => {
 });
 
 // 7. NEW: Waiter manually requests bill for a table
+// 7. NEW: Waiter manually requests bill for a table
 router.patch("/request-bill", async (req, res) => {
-  const { tableNumber } = req.body;
+  const { tableNumber, paymentMethod } = req.body; // <-- Grab paymentMethod
 
   try {
     const { data: session, error: sessionErr } = await supabase
@@ -219,10 +220,13 @@ router.patch("/request-bill", async (req, res) => {
 
     if (sessionErr || !session) return res.status(404).json({ error: "No active session" });
 
+    // Append the chosen method to the status (e.g., 'billed_cash')
+    const finalStatus = paymentMethod ? `billed_${paymentMethod}` : "billed";
+
     // Update to 'billed' so it appears pulsing on Cashier dashboard
     const { error: updateErr } = await supabase
       .from("table_sessions")
-      .update({ status: "billed" })
+      .update({ status: finalStatus })
       .eq("session_id", session.session_id);
 
     if (updateErr) throw updateErr;

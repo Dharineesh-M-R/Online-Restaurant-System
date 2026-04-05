@@ -15,7 +15,11 @@ import {
   Trash2,
   Plus,
   Minus,
-  Receipt // Imported Receipt icon for the button
+  Receipt,
+  Smartphone,
+  CreditCard,
+  IndianRupee,
+  ArrowLeft
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -54,6 +58,9 @@ export default function WaiterDashboard() {
   const [selectedTable, setSelectedTable] = useState<number | null>(null);
   const [tableOrders, setTableOrders] = useState<OrderSummaryItem[]>([]);
   const [isModalLoading, setIsModalLoading] = useState(false);
+  
+  // Payment Modal State
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
   const router = useRouter();
@@ -205,19 +212,21 @@ export default function WaiterDashboard() {
     }
   };
 
-  // 🔥 NEW: Trigger the Bill Request for the table
-  const handleRequestBill = async () => {
+  // 🔥 Triggered from the Payment Modal
+  const executeBillRequest = async (method: string) => {
     if (!selectedTable) return;
+    setShowPaymentModal(false); // Close payment modal immediately
+    
     try {
       const res = await fetch(`${apiUrl}/admin/waiter/request-bill`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tableNumber: selectedTable }),
+        body: JSON.stringify({ tableNumber: selectedTable, paymentMethod: method }), // Send method
       });
 
       if (res.ok) {
-        setSelectedTable(null); // Close modal
-        fetchFloorPlan(); // Refresh view
+        setSelectedTable(null); // Close main table details modal
+        fetchFloorPlan(); // Refresh floor plan view
       }
     } catch (err) {
       console.error("Failed to request bill", err);
@@ -453,7 +462,14 @@ export default function WaiterDashboard() {
                       {item.status === 'waiting_confirmation' ? (
                         <div className="flex items-center gap-3">
                           <button 
-                            onClick={() => handleDeleteItem(item.id)} 
+                            onClick={async () => {
+                                await fetch(`${apiUrl}/admin/waiter/confirm-items`, {
+                                    method: "PATCH",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ items: [{ id: item.id, action: 'delete' }] }),
+                                });
+                                handleDeleteItem(item.id);
+                            }} 
                             className="text-red-400 hover:bg-red-50 p-1.5 rounded-lg"
                           >
                             <Trash2 size={16} />
@@ -497,7 +513,7 @@ export default function WaiterDashboard() {
                   Back
                 </button>
                 <button 
-                  onClick={handleRequestBill}
+                  onClick={() => setShowPaymentModal(true)} // Open Payment Modal
                   className="w-2/3 bg-orange-600 text-white py-4 rounded-2xl font-black shadow-lg shadow-orange-200 active:scale-95 transition-all flex items-center justify-center gap-2"
                 >
                   <Receipt size={18} /> Request Bill
@@ -512,6 +528,32 @@ export default function WaiterDashboard() {
               </button>
             )}
 
+          </div>
+        </div>
+      )}
+
+      {/* --- PAYMENT SELECTION MODAL --- */}
+      {showPaymentModal && (
+        <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center z-[60] p-4 transition-opacity">
+          <div className="bg-white rounded-[2.5rem] p-6 w-full max-w-sm shadow-2xl animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-200">
+            <h3 className="text-xl font-black text-stone-900 mb-1 text-center">Customer Payment</h3>
+            <p className="text-stone-500 text-sm text-center mb-6">Select how the customer wants to pay.</p>
+            
+            <div className="space-y-3">
+              <button onClick={() => executeBillRequest("upi")} className="w-full flex items-center justify-between p-4 rounded-2xl border-2 border-stone-100 hover:border-purple-500 hover:bg-purple-50 transition-colors active:scale-[0.98]">
+                <div className="flex items-center gap-3"><Smartphone size={24} className="text-purple-600" /><span className="font-bold text-stone-900">UPI / QR Code</span></div>
+              </button>
+              
+              <button onClick={() => executeBillRequest("card")} className="w-full flex items-center justify-between p-4 rounded-2xl border-2 border-stone-100 hover:border-blue-500 hover:bg-blue-50 transition-colors active:scale-[0.98]">
+                <div className="flex items-center gap-3"><CreditCard size={24} className="text-blue-600" /><span className="font-bold text-stone-900">Credit / Debit Card</span></div>
+              </button>
+
+              <button onClick={() => executeBillRequest("cash")} className="w-full flex items-center justify-between p-4 rounded-2xl border-2 border-stone-100 hover:border-green-500 hover:bg-green-50 transition-colors active:scale-[0.98]">
+                <div className="flex items-center gap-3"><IndianRupee size={24} className="text-green-600" /><span className="font-bold text-stone-900">Cash</span></div>
+              </button>
+            </div>
+            
+            <button onClick={() => setShowPaymentModal(false)} className="w-full mt-4 py-3 text-stone-400 font-bold hover:text-stone-600">Cancel</button>
           </div>
         </div>
       )}
