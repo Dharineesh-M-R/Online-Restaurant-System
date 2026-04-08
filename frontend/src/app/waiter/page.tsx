@@ -212,21 +212,20 @@ export default function WaiterDashboard() {
     }
   };
 
-  // 🔥 Triggered from the Payment Modal
   const executeBillRequest = async (method: string) => {
     if (!selectedTable) return;
-    setShowPaymentModal(false); // Close payment modal immediately
+    setShowPaymentModal(false); 
     
     try {
       const res = await fetch(`${apiUrl}/admin/waiter/request-bill`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tableNumber: selectedTable, paymentMethod: method }), // Send method
+        body: JSON.stringify({ tableNumber: selectedTable, paymentMethod: method }), 
       });
 
       if (res.ok) {
-        setSelectedTable(null); // Close main table details modal
-        fetchFloorPlan(); // Refresh floor plan view
+        setSelectedTable(null); 
+        fetchFloorPlan(); 
       }
     } catch (err) {
       console.error("Failed to request bill", err);
@@ -276,10 +275,8 @@ export default function WaiterDashboard() {
     );
   }
 
-  // --- LOGIC GATES FOR BUTTON RENDER ---
   const hasItemsToConfirm = tableOrders.some(item => item.status === 'waiting_confirmation');
   
-  // Evaluates to true ONLY if there are items, AND none of them are pending/preparing/waiting
   const allItemsReadyOrServed = tableOrders.length > 0 && 
     tableOrders.every(item => item.status === 'ready' || item.status === 'served');
 
@@ -458,9 +455,10 @@ export default function WaiterDashboard() {
                         </p>
                       </div>
 
-                      {/* EDITABLE CONTROLS: ONLY FOR WAITING_CONFIRMATION */}
-                      {item.status === 'waiting_confirmation' ? (
-                        <div className="flex items-center gap-3">
+                      {/* EDITABLE CONTROLS */}
+                      <div className="flex items-center gap-3">
+                        {/* TRASH ICON: Visible if waiting_confirmation OR pending (Out of stock fallback) */}
+                        {(item.status === 'waiting_confirmation' || item.status === 'pending') && (
                           <button 
                             onClick={async () => {
                                 await fetch(`${apiUrl}/admin/waiter/confirm-items`, {
@@ -470,10 +468,14 @@ export default function WaiterDashboard() {
                                 });
                                 handleDeleteItem(item.id);
                             }} 
-                            className="text-red-400 hover:bg-red-50 p-1.5 rounded-lg"
+                            className="text-red-400 hover:bg-red-50 p-1.5 rounded-lg transition-colors"
                           >
                             <Trash2 size={16} />
                           </button>
+                        )}
+                        
+                        {/* QUANTITY CONTROLS: Only visible for waiting_confirmation */}
+                        {item.status === 'waiting_confirmation' ? (
                           <div className="flex items-center bg-white rounded-xl border border-stone-200 p-1">
                             <button onClick={() => handleQuantityChange(item.id, -1)} className="p-1 text-stone-600 hover:bg-stone-50 rounded-lg">
                               <Minus size={14} />
@@ -483,12 +485,12 @@ export default function WaiterDashboard() {
                               <Plus size={14} />
                             </button>
                           </div>
-                        </div>
-                      ) : (
-                        <div className="flex items-center justify-center bg-stone-200 text-stone-600 px-3 py-1.5 rounded-xl font-black text-sm">
-                          {item.quantity}x
-                        </div>
-                      )}
+                        ) : (
+                          <div className="flex items-center justify-center bg-stone-200 text-stone-600 px-3 py-1.5 rounded-xl font-black text-sm">
+                            {item.quantity}x
+                          </div>
+                        )}
+                      </div>
                     </div>
                     {item.notes && <p className="mt-2 text-[10px] text-stone-400 italic">"{item.notes}"</p>}
                   </div>
@@ -513,7 +515,7 @@ export default function WaiterDashboard() {
                   Back
                 </button>
                 <button 
-                  onClick={() => setShowPaymentModal(true)} // Open Payment Modal
+                  onClick={() => setShowPaymentModal(true)}
                   className="w-2/3 bg-orange-600 text-white py-4 rounded-2xl font-black shadow-lg shadow-orange-200 active:scale-95 transition-all flex items-center justify-center gap-2"
                 >
                   <Receipt size={18} /> Request Bill
@@ -534,7 +536,7 @@ export default function WaiterDashboard() {
 
       {/* --- PAYMENT SELECTION MODAL --- */}
       {showPaymentModal && (
-        <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center z-60 p-4 transition-opacity">
+        <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center z-[60] p-4 transition-opacity">
           <div className="bg-white rounded-[2.5rem] p-6 w-full max-w-sm shadow-2xl animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-200">
             <h3 className="text-xl font-black text-stone-900 mb-1 text-center">Customer Payment</h3>
             <p className="text-stone-500 text-sm text-center mb-6">Select how the customer wants to pay.</p>
