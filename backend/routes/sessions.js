@@ -14,6 +14,7 @@ router.get("/", async (req, res) => {
       .select("session_id, cart_items")
       .eq("table_number", table)
       .neq("status", "completed") 
+      .neq("status", "cancelled") // 🔥 FIX: Ignore cancelled sessions!
       .maybeSingle(); 
 
     if (fetchError) throw fetchError;
@@ -36,7 +37,7 @@ router.get("/", async (req, res) => {
   }
 });
 
-// 2. The Master Sync Route (Pulls from NORMALIZED tables)
+// 2. The Master Sync Route
 router.get("/:sessionId/sync", async (req, res) => {
   const { sessionId } = req.params;
 
@@ -46,6 +47,7 @@ router.get("/:sessionId/sync", async (req, res) => {
       .select("table_number, cart_items")
       .eq("session_id", sessionId)
       .neq("status", "completed")
+      .neq("status", "cancelled") // 🔥 FIX: Forces a 404 if the session was force closed!
       .single();
 
     if (sessionErr || !sessionData) return res.status(404).json({ error: "Session not found" });
@@ -90,9 +92,8 @@ router.get("/:sessionId/sync", async (req, res) => {
       for (const serve of activeOrder.order_serves) {
         let serveTotal = 0;
         
-        // Filter out items that might have been deleted by the waiter, then format
         const formattedItems = serve.order_items
-          .filter(item => item !== null) // Safety check
+          .filter(item => item !== null) 
           .map(item => {
             serveTotal += Number(item.price) * item.quantity;
             return {
@@ -101,11 +102,10 @@ router.get("/:sessionId/sync", async (req, res) => {
               price: item.price,
               quantity: item.quantity,
               notes: item.notes,
-              status: item.status // LIVE STATUS SENT TO FRONTEND!
+              status: item.status 
             };
           });
 
-        // Only push the serve if it actually has items (waiter might have deleted a whole round)
         if (formattedItems.length > 0) {
           formattedServes.push({
             serveNumber: serve.serve_number,
@@ -159,7 +159,10 @@ router.post("/:sessionId/orders", async (req, res) => {
       .from("table_sessions")
       .select("table_number")
       .eq("session_id", sessionId)
+      .neq("status", "completed")
+      .neq("status", "cancelled") // 🔥 FIX: Blocks orders on dead sessions
       .single();
+      
     if (sessionErr) throw sessionErr;
 
     const { data: tableInfo, error: tableErr } = await supabase

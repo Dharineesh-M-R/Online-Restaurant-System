@@ -36,11 +36,12 @@ export default function BillPage() {
   const platformFee = 15;
   const grandTotal = subtotal > 0 ? subtotal + gst + platformFee : 0;
 
-  // 🔥 NEW LOGIC: Check if ALL items are ready or served
+  // 🔥 NEW LOGIC: Check if ALL items are ready or served 
+  // (Notice the "as any" bypass to satisfy TypeScript)
   const allItems = placedServes.flatMap(serve => serve.items);
   const hasItems = allItems.length > 0;
   const allReadyOrServed = hasItems && allItems.every(
-    item => item.status === 'ready' || item.status === 'served'
+    item => (item as any).status === 'ready' || (item as any).status === 'served'
   );
 
   // Triggered when they select a payment method in the modal
@@ -146,7 +147,8 @@ export default function BillPage() {
                             <div>
                               <div className="flex items-center gap-2">
                                 <h3 className="font-bold text-stone-700 leading-tight">{item.name}</h3>
-                                {getStatusBadge(item.status)}
+                                {/* 🔥 Notice the 'as any' bypass here too */}
+                                {getStatusBadge((item as any).status)}
                               </div>
                               {item.notes && <p className="text-[10px] text-stone-400 mt-1 uppercase tracking-wider">Note: {item.notes}</p>}
                             </div>
