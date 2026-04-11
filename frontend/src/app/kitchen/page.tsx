@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { ChefHat, Clock, Flame, CheckCircle, LayoutGrid } from "lucide-react";
+import { ChefHat, Clock, Flame, CheckCircle, LayoutGrid, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 interface KitchenItem {
@@ -9,7 +9,7 @@ interface KitchenItem {
   name: string;
   quantity: number;
   notes: string | null;
-  status: "pending" | "preparing" | "ready" | "served";
+  status: "pending" | "preparing" | "ready" | "served" | "waiting_confirmation";
   category: string; 
 }
 
@@ -37,16 +37,11 @@ export default function KitchenDashboard() {
     const expiry = localStorage.getItem("staff_expiry");
     const currentTime = new Date().getTime();
 
-    // Check if role is wrong, OR if expiry is missing, OR if 8 hours have passed
     if (role !== "kitchen" || !expiry || currentTime > parseInt(expiry)) {
-      
-      // Wipe the expired data
       localStorage.removeItem("staff_role");
       localStorage.removeItem("staff_id");
       localStorage.removeItem("staff_name");
       localStorage.removeItem("staff_expiry");
-      
-      // Kick them out to the login page
       router.push("/login");
     }
   }, [router]);
@@ -97,6 +92,29 @@ export default function KitchenDashboard() {
     }
   };
 
+  // 🔥 NEW LOGIC: Mark item as out of stock
+  const markOutOfStock = async (itemId: string) => {
+    // Optimistically remove the item from the kitchen UI
+    setTickets((prevTickets) =>
+      prevTickets.map((ticket) => ({
+        ...ticket,
+        items: ticket.items.filter((item) => item.id !== itemId),
+      })).filter((ticket) => ticket.items.length > 0) // Remove ticket if empty
+    );
+
+    try {
+      // Send it back to the waiter as 'waiting_confirmation'
+      await fetch(`${apiUrl}/admin/kitchen/update-item`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ itemId, status: "waiting_confirmation" }),
+      });
+    } catch (err) {
+      console.error("Failed to mark item as out of stock", err);
+      fetchKitchenOrders(); // Revert on failure
+    }
+  };
+
   const filteredTickets = tickets
     .map((ticket) => {
       const relevantItems = activeStation === "All" 
@@ -119,7 +137,6 @@ export default function KitchenDashboard() {
   return (
     <div className="min-h-screen bg-[#F8F9FB] text-gray-900 p-4 sm:p-8 font-sans selection:bg-orange-500/30">
       
-      {/* Top Navigation Bar - Matching Billing/Menu Header Style */}
       <header className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-8">
         <div className="flex items-center gap-4">
           <div className="bg-orange-100 p-3.5 rounded-2xl shadow-sm border border-orange-200/50">
@@ -131,7 +148,6 @@ export default function KitchenDashboard() {
           </div>
         </div>
 
-        {/* Chef Station Filter Tabs - Exact match to Menu page categories */}
         <div className="flex gap-2 overflow-x-auto w-full md:w-auto pb-2 md:pb-0 no-scrollbar">
           {stations.map((station) => (
             <button
@@ -183,19 +199,21 @@ export default function KitchenDashboard() {
               {/* Items List */}
               <div className="p-4 flex-1 overflow-y-auto space-y-3 bg-white">
                 {ticket.items.map((item) => (
-                  <button
+                  // 🔥 FIX: Changed from <button> to <div> to allow multiple click targets inside
+                  <div
                     key={item.id}
-                    onClick={() => advanceStatus(item.id, item.status)}
-                    disabled={item.status === "ready" || item.status === "served"}
-                    className={`w-full text-left p-4 rounded-2xl border-l-4 transition-all active:scale-[0.98] ${
+                    className={`w-full text-left p-4 rounded-2xl border-l-4 transition-all ${
                       item.status === "pending" 
-                        ? "bg-gray-50 border-gray-300 hover:bg-gray-100" 
+                        ? "bg-gray-50 border-gray-300" 
                         : item.status === "preparing"
                         ? "bg-orange-50/50 border-orange-500 shadow-sm shadow-orange-100"
-                        : "bg-green-50/50 border-green-500 opacity-60 cursor-not-allowed"
+                        : "bg-green-50/50 border-green-500 opacity-60"
                     }`}
                   >
-                    <div className="flex justify-between items-start gap-3">
+                    <div 
+                      className={`flex justify-between items-start gap-3 ${item.status !== "ready" ? "cursor-pointer hover:opacity-80" : ""}`}
+                      onClick={() => advanceStatus(item.id, item.status)}
+                    >
                       <div className="flex gap-3 items-start">
                         <span className={`text-xl font-black mt-0.5 ${
                            item.status === "pending" ? "text-gray-800" : 
@@ -226,7 +244,22 @@ export default function KitchenDashboard() {
                         {item.status === "ready" && <CheckCircle size={20} className="text-green-500" />}
                       </div>
                     </div>
-                  </button>
+
+                    {/* 🔥 NEW LOGIC: Out of Stock Button */}
+                    {(item.status === "pending" || item.status === "preparing") && (
+                      <div className="mt-4 pt-3 border-t border-gray-200/60 flex justify-end">
+                        <button
+                          onClick={(e) => { 
+                            e.stopPropagation(); // Prevents advancing the status
+                            markOutOfStock(item.id);
+                          }}
+                          className="text-[10px] font-bold uppercase tracking-wider text-red-600 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors active:scale-95"
+                        >
+                          <X size={14} strokeWidth={3} /> Out of Stock
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 ))}
               </div>
             </div>

@@ -84,7 +84,6 @@ router.get("/floor-plan", async (req, res) => {
     if (error) throw error;
 
     const floorData = tables.map(t => {
-      // 🔥 FIX: Include 'billed' statuses so the table doesn't ghost before checkout
       const activeSession = t.table_sessions?.find(s => s.status !== 'completed' && s.status !== 'cancelled');
       
       const hasUnconfirmed = activeSession?.orders?.some(order => 
@@ -117,7 +116,7 @@ router.get("/table-details/:tableNumber", async (req, res) => {
       .from("table_sessions")
       .select("session_id")
       .eq("table_number", tableNumber)
-      .neq("status", "completed") // Safely find active or billed sessions
+      .neq("status", "completed") 
       .neq("status", "cancelled")
       .single();
 
@@ -152,7 +151,8 @@ router.get("/table-details/:tableNumber", async (req, res) => {
       notes: item.notes
     }));
 
-    res.json({ items: formattedItems });
+    // 🔥 FIX: Returning sessionId so the Waiter frontend can cancel ghost sessions
+    res.json({ sessionId: session.session_id, items: formattedItems });
   } catch (err) {
     console.error("Table Details Error:", err);
     res.status(500).json({ error: "Internal server error" });
@@ -204,10 +204,9 @@ router.patch("/attend-table", async (req, res) => {
   }
 });
 
-// 7. NEW: Waiter manually requests bill for a table
-// 7. NEW: Waiter manually requests bill for a table
+// 7. Waiter manually requests bill for a table
 router.patch("/request-bill", async (req, res) => {
-  const { tableNumber, paymentMethod } = req.body; // <-- Grab paymentMethod
+  const { tableNumber, paymentMethod } = req.body; 
 
   try {
     const { data: session, error: sessionErr } = await supabase
@@ -220,10 +219,8 @@ router.patch("/request-bill", async (req, res) => {
 
     if (sessionErr || !session) return res.status(404).json({ error: "No active session" });
 
-    // Append the chosen method to the status (e.g., 'billed_cash')
     const finalStatus = paymentMethod ? `billed_${paymentMethod}` : "billed";
 
-    // Update to 'billed' so it appears pulsing on Cashier dashboard
     const { error: updateErr } = await supabase
       .from("table_sessions")
       .update({ status: finalStatus })

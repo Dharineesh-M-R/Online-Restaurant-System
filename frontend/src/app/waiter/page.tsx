@@ -19,7 +19,7 @@ import {
   Smartphone,
   CreditCard,
   IndianRupee,
-  ArrowLeft
+  ShoppingBag
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -56,6 +56,7 @@ export default function WaiterDashboard() {
 
   // Modal State
   const [selectedTable, setSelectedTable] = useState<number | null>(null);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null); // 🔥 Added session ID state
   const [tableOrders, setTableOrders] = useState<OrderSummaryItem[]>([]);
   const [isModalLoading, setIsModalLoading] = useState(false);
   
@@ -118,6 +119,7 @@ export default function WaiterDashboard() {
       if (res.ok) {
         const data = await res.json();
         setTableOrders(data.items);
+        setActiveSessionId(data.sessionId); // 🔥 Save the session ID
       }
     } catch (err) {
       console.error("Error fetching table items", err);
@@ -131,6 +133,7 @@ export default function WaiterDashboard() {
       const res = await fetch(`${apiUrl}/admin/waiter/table-details/${tableNum}?t=${Date.now()}`, { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
+        setActiveSessionId(data.sessionId); // Ensure it stays synced
         setTableOrders((prevOrders) => {
           return data.items.map((newItem: OrderSummaryItem) => {
             const existingLocalItem = prevOrders.find(prev => prev.id === newItem.id);
@@ -212,21 +215,20 @@ export default function WaiterDashboard() {
     }
   };
 
-  // 🔥 Triggered from the Payment Modal
   const executeBillRequest = async (method: string) => {
     if (!selectedTable) return;
-    setShowPaymentModal(false); // Close payment modal immediately
+    setShowPaymentModal(false); 
     
     try {
       const res = await fetch(`${apiUrl}/admin/waiter/request-bill`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tableNumber: selectedTable, paymentMethod: method }), // Send method
+        body: JSON.stringify({ tableNumber: selectedTable, paymentMethod: method }), 
       });
 
       if (res.ok) {
-        setSelectedTable(null); // Close main table details modal
-        fetchFloorPlan(); // Refresh floor plan view
+        setSelectedTable(null); 
+        fetchFloorPlan(); 
       }
     } catch (err) {
       console.error("Failed to request bill", err);
@@ -261,6 +263,32 @@ export default function WaiterDashboard() {
     }
   };
 
+  // 🔥 NEW LOGIC: Clear Ghost Session
+  const handleClearEmptyTable = async () => {
+    if (!selectedTable || !activeSessionId) return;
+    
+    const confirm = window.confirm(
+      `Are you sure you want to clear Table ${selectedTable}? This will cancel their session.`
+    );
+    if (!confirm) return;
+
+    try {
+      const res = await fetch(`${apiUrl}/sessions/${activeSessionId}/cancel`, { 
+        method: "POST" 
+      });
+      
+      if (res.ok) {
+        setSelectedTable(null);
+        setActiveSessionId(null);
+        fetchFloorPlan(); // Refresh right away to show table is vacant
+      } else {
+        alert("Failed to cancel the session.");
+      }
+    } catch (err) {
+      console.error("Error clearing empty table", err);
+    }
+  };
+
   const groupedTasks = readyItems.reduce((acc, item) => {
     if (!acc[item.tableNumber]) acc[item.tableNumber] = [];
     acc[item.tableNumber].push(item);
@@ -279,9 +307,10 @@ export default function WaiterDashboard() {
   // --- LOGIC GATES FOR BUTTON RENDER ---
   const hasItemsToConfirm = tableOrders.some(item => item.status === 'waiting_confirmation');
   
-  // Evaluates to true ONLY if there are items, AND none of them are pending/preparing/waiting
   const allItemsReadyOrServed = tableOrders.length > 0 && 
     tableOrders.every(item => item.status === 'ready' || item.status === 'served');
+
+  const isSelectedTableParcel = selectedTable !== null && selectedTable > 100;
 
   return (
     <div className="min-h-screen bg-stone-50 text-stone-900 pb-24 font-sans">
@@ -320,41 +349,48 @@ export default function WaiterDashboard() {
                 <p className="text-sm text-stone-500 mt-2">No food is waiting in the kitchen.</p>
               </div>
             ) : (
-              Object.entries(groupedTasks).map(([tableNum, items]) => (
-                <div key={tableNum} className="bg-white rounded-3xl p-5 shadow-sm border border-stone-100">
-                  <div className="flex justify-between items-center mb-4 border-b border-stone-100 pb-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-orange-600 rounded-full flex items-center justify-center text-white font-black text-lg shadow-md">
-                        {tableNum}
-                      </div>
-                      <h3 className="font-bold text-stone-900">Table {tableNum}</h3>
-                    </div>
-                    <div className="flex items-center text-xs font-bold text-orange-500 bg-orange-50 px-2.5 py-1 rounded-md">
-                      <Clock size={12} className="mr-1" /> Ready
-                    </div>
-                  </div>
-
-                  <div className="space-y-3">
-                    {items.map((item) => (
-                      <div key={item.id} className="flex justify-between items-center gap-3 bg-stone-50 p-3 rounded-2xl">
-                        <div className="flex items-start gap-3">
-                          <span className="font-black text-stone-900">{item.quantity}x</span>
-                          <div>
-                            <p className="font-bold text-stone-800 leading-tight">{item.name}</p>
-                            <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider mt-0.5">Serve {item.serveNumber}</p>
-                          </div>
+              Object.entries(groupedTasks).map(([tableNum, items]) => {
+                const isParcel = Number(tableNum) > 100;
+                
+                return (
+                  <div key={tableNum} className={`bg-white rounded-3xl p-5 shadow-sm border ${isParcel ? 'border-purple-200 shadow-purple-50' : 'border-stone-100'}`}>
+                    <div className="flex justify-between items-center mb-4 border-b border-stone-100 pb-3">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-black text-lg shadow-md ${isParcel ? 'bg-purple-600' : 'bg-orange-600'}`}>
+                          {isParcel ? <ShoppingBag size={18} /> : tableNum}
                         </div>
-                        <button
-                          onClick={() => markAsServed(item.id)}
-                          className="w-10 h-10 bg-stone-900 text-white rounded-xl flex items-center justify-center active:scale-90 transition-transform shadow-md"
-                        >
-                          <CheckCircle2 size={18} strokeWidth={3} />
-                        </button>
+                        <div>
+                          <h3 className="font-bold text-stone-900">{isParcel ? `Parcel #${Number(tableNum) - 100}` : `Table ${tableNum}`}</h3>
+                          {isParcel && <p className="text-[10px] text-purple-600 font-bold uppercase tracking-wider">Takeaway</p>}
+                        </div>
                       </div>
-                    ))}
+                      <div className="flex items-center text-xs font-bold text-orange-500 bg-orange-50 px-2.5 py-1 rounded-md">
+                        <Clock size={12} className="mr-1" /> Ready
+                      </div>
+                    </div>
+
+                    <div className="space-y-3">
+                      {items.map((item) => (
+                        <div key={item.id} className="flex justify-between items-center gap-3 bg-stone-50 p-3 rounded-2xl">
+                          <div className="flex items-start gap-3">
+                            <span className="font-black text-stone-900">{item.quantity}x</span>
+                            <div>
+                              <p className="font-bold text-stone-800 leading-tight">{item.name}</p>
+                              {!isParcel && <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider mt-0.5">Serve {item.serveNumber}</p>}
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => markAsServed(item.id)}
+                            className={`w-10 h-10 text-white rounded-xl flex items-center justify-center active:scale-90 transition-transform shadow-md ${isParcel ? 'bg-purple-600' : 'bg-stone-900'}`}
+                          >
+                            <CheckCircle2 size={18} strokeWidth={3} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              ))
+                )
+              })
             )}
           </div>
         )}
@@ -363,54 +399,62 @@ export default function WaiterDashboard() {
         {activeTab === "tables" && (
           <div className="animate-in fade-in duration-500">
             <div className="grid grid-cols-3 gap-4">
-              {floorTables.map((table) => (
-                <div 
-                  key={table.number}
-                  onClick={() => viewTableDetails(table.number, table.isOccupied)}
-                  className={`
-                    relative aspect-square rounded-3xl flex flex-col items-center justify-center border-2 transition-all duration-300 cursor-pointer
-                    ${table.hasUnconfirmed 
-                      ? "bg-blue-50 border-blue-500 animate-pulse shadow-lg shadow-blue-100" 
-                      : table.needsHelp 
-                        ? "bg-red-50 border-red-500 shadow-lg shadow-red-100 animate-pulse" 
-                        : table.isOccupied 
-                          ? "bg-orange-50 border-orange-200 shadow-sm active:scale-95" 
-                          : "bg-white border-stone-100 opacity-60 cursor-default"}
-                  `}
-                >
-                  <span className={`text-2xl font-black 
-                    ${table.hasUnconfirmed ? "text-blue-600" : 
-                      table.needsHelp ? "text-red-600" : 
-                      table.isOccupied ? "text-orange-600" : "text-stone-300"}`}>
-                    {table.number}
-                  </span>
-                  
-                  {table.needsHelp ? (
-                    <button 
-                      onClick={(e) => attendTable(e, table.number)}
-                      className="mt-2 bg-red-600 text-white px-2 py-1 rounded-lg text-[8px] font-black uppercase flex items-center gap-1 shadow-lg shadow-red-200 active:scale-90 transition-transform"
-                    >
-                      <Hand size={10} /> Attended
-                    </button>
-                  ) : (
-                    <div className="flex items-center gap-1 mt-1">
-                      {table.isOccupied && <UserCheck size={10} className={table.hasUnconfirmed ? "text-blue-400" : "text-orange-400"} />}
-                      <span className={`text-[10px] font-bold uppercase tracking-tighter 
-                        ${table.hasUnconfirmed ? "text-blue-500" : 
-                          table.isOccupied ? "text-orange-400" : "text-stone-300"}`}>
-                        {table.hasUnconfirmed ? "New Order" : table.isOccupied ? "Active" : "Vacant"}
+              {floorTables.map((table) => {
+                const isParcel = table.number > 100;
+                
+                return (
+                  <div 
+                    key={table.number}
+                    onClick={() => viewTableDetails(table.number, table.isOccupied)}
+                    className={`
+                      relative aspect-square rounded-3xl flex flex-col items-center justify-center border-2 transition-all duration-300 cursor-pointer
+                      ${table.hasUnconfirmed 
+                        ? (isParcel ? "bg-purple-50 border-purple-500 animate-pulse shadow-lg shadow-purple-100" : "bg-blue-50 border-blue-500 animate-pulse shadow-lg shadow-blue-100") 
+                        : table.needsHelp 
+                          ? "bg-red-50 border-red-500 shadow-lg shadow-red-100 animate-pulse" 
+                          : table.isOccupied 
+                            ? (isParcel ? "bg-purple-50 border-purple-200 shadow-sm active:scale-95" : "bg-orange-50 border-orange-200 shadow-sm active:scale-95") 
+                            : "bg-white border-stone-100 opacity-60 cursor-default"}
+                    `}
+                  >
+                    {isParcel ? (
+                      <ShoppingBag size={24} className={table.hasUnconfirmed ? "text-purple-600" : table.needsHelp ? "text-red-600" : table.isOccupied ? "text-purple-500" : "text-stone-300"} />
+                    ) : (
+                      <span className={`text-2xl font-black 
+                        ${table.hasUnconfirmed ? "text-blue-600" : 
+                          table.needsHelp ? "text-red-600" : 
+                          table.isOccupied ? "text-orange-600" : "text-stone-300"}`}>
+                        {table.number}
                       </span>
-                    </div>
-                  )}
-                </div>
-              ))}
+                    )}
+                    
+                    {table.needsHelp ? (
+                      <button 
+                        onClick={(e) => attendTable(e, table.number)}
+                        className="mt-2 bg-red-600 text-white px-2 py-1 rounded-lg text-[8px] font-black uppercase flex items-center gap-1 shadow-lg shadow-red-200 active:scale-90 transition-transform"
+                      >
+                        <Hand size={10} /> Attended
+                      </button>
+                    ) : (
+                      <div className="flex items-center gap-1 mt-1">
+                        {!isParcel && table.isOccupied && <UserCheck size={10} className={table.hasUnconfirmed ? "text-blue-400" : "text-orange-400"} />}
+                        <span className={`text-[10px] font-bold uppercase tracking-tighter 
+                          ${table.hasUnconfirmed ? (isParcel ? "text-purple-500" : "text-blue-500") : 
+                            table.isOccupied ? (isParcel ? "text-purple-400" : "text-orange-400") : "text-stone-300"}`}>
+                          {isParcel ? `Token ${table.number - 100}` : (table.hasUnconfirmed ? "New Order" : table.isOccupied ? "Active" : "Vacant")}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
             </div>
 
+            {/* Legend */}
             <div className="mt-10 p-4 bg-white rounded-2xl border border-stone-100 shadow-sm flex flex-wrap justify-around gap-y-3 text-[10px] font-bold uppercase tracking-wider">
               <div className="flex items-center gap-2"><div className="w-3 h-3 bg-stone-200 rounded-full"></div> Vacant</div>
-              <div className="flex items-center gap-2"><div className="w-3 h-3 bg-orange-500 rounded-full"></div> Occupied</div>
-              <div className="flex items-center gap-2"><div className="w-3 h-3 bg-blue-500 rounded-full animate-pulse"></div> New Order</div>
-              <div className="flex items-center gap-2"><div className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div> Call Waiter</div>
+              <div className="flex items-center gap-2"><div className="w-3 h-3 bg-orange-500 rounded-full"></div> Occupied Table</div>
+              <div className="flex items-center gap-2"><div className="w-3 h-3 bg-purple-500 rounded-full"></div> Takeaway Order</div>
             </div>
           </div>
         )}
@@ -423,8 +467,12 @@ export default function WaiterDashboard() {
             
             <div className="flex justify-between items-start mb-6">
               <div>
-                <h2 className="text-3xl font-black text-stone-900 italic">Table {selectedTable}</h2>
-                <p className="text-xs font-bold text-orange-500 uppercase tracking-widest mt-1">Order Summary</p>
+                <h2 className={`text-3xl font-black italic ${isSelectedTableParcel ? 'text-purple-900' : 'text-stone-900'}`}>
+                  {isSelectedTableParcel ? `Parcel #${selectedTable - 100}` : `Table ${selectedTable}`}
+                </h2>
+                <p className={`text-xs font-bold uppercase tracking-widest mt-1 ${isSelectedTableParcel ? 'text-purple-500' : 'text-orange-500'}`}>
+                  Verify Order
+                </p>
               </div>
               <button 
                 onClick={() => setSelectedTable(null)}
@@ -441,26 +489,34 @@ export default function WaiterDashboard() {
                   <p className="font-bold">Fetching details...</p>
                 </div>
               ) : tableOrders.length === 0 ? (
-                <div className="py-12 text-center text-stone-400 font-bold uppercase text-xs">No active items</div>
+                // 🔥 NEW UI: Clear Ghost Session Button
+                <div className="py-12 flex flex-col items-center justify-center">
+                  <p className="text-center text-stone-400 font-bold uppercase text-xs mb-6">No active items</p>
+                  <button 
+                    onClick={handleClearEmptyTable}
+                    className="text-red-600 bg-red-50 hover:bg-red-100 px-6 py-3 rounded-2xl font-bold text-sm transition-colors flex items-center gap-2 active:scale-95"
+                  >
+                    <Trash2 size={16} /> Clear Empty Table (Cancel Session)
+                  </button>
+                </div>
               ) : (
                 tableOrders.map((item) => (
-                  <div key={item.id} className={`p-4 rounded-2xl border transition-colors ${item.status === 'waiting_confirmation' ? 'bg-blue-50/50 border-blue-100' : 'bg-stone-50 border-stone-100'}`}>
+                  <div key={item.id} className={`p-4 rounded-2xl border transition-colors ${item.status === 'waiting_confirmation' ? (isSelectedTableParcel ? 'bg-purple-50 border-purple-100' : 'bg-blue-50/50 border-blue-100') : 'bg-stone-50 border-stone-100'}`}>
                     <div className="flex justify-between items-start">
                       <div className="flex-1 pr-2">
                         <div className="flex items-center gap-2">
                           <p className="font-bold text-stone-800 leading-tight">{item.name}</p>
                           {item.status === 'waiting_confirmation' && (
-                            <span className="text-[8px] bg-blue-600 text-white px-1.5 py-0.5 rounded font-black uppercase tracking-tighter">New</span>
+                            <span className={`text-[8px] text-white px-1.5 py-0.5 rounded font-black uppercase tracking-tighter ${isSelectedTableParcel ? 'bg-purple-600' : 'bg-blue-600'}`}>New</span>
                           )}
                         </div>
                         <p className="text-[10px] font-bold text-stone-400 mt-1 uppercase tracking-tighter">
-                          Serve {item.serve} • Status: <span className={item.status === 'waiting_confirmation' ? 'text-blue-500' : 'text-stone-500'}>{item.status.replace('_', ' ')}</span>
+                          {!isSelectedTableParcel && `Serve ${item.serve} • `}Status: <span className={item.status === 'waiting_confirmation' ? (isSelectedTableParcel ? 'text-purple-500' : 'text-blue-500') : 'text-stone-500'}>{item.status.replace('_', ' ')}</span>
                         </p>
                       </div>
 
-                      {/* EDITABLE CONTROLS: ONLY FOR WAITING_CONFIRMATION */}
-                      {item.status === 'waiting_confirmation' ? (
-                        <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-3">
+                        {(item.status === 'waiting_confirmation' || item.status === 'pending') && (
                           <button 
                             onClick={async () => {
                                 await fetch(`${apiUrl}/admin/waiter/confirm-items`, {
@@ -470,10 +526,13 @@ export default function WaiterDashboard() {
                                 });
                                 handleDeleteItem(item.id);
                             }} 
-                            className="text-red-400 hover:bg-red-50 p-1.5 rounded-lg"
+                            className="text-red-400 hover:bg-red-50 p-1.5 rounded-lg transition-colors"
                           >
                             <Trash2 size={16} />
                           </button>
+                        )}
+                        
+                        {item.status === 'waiting_confirmation' ? (
                           <div className="flex items-center bg-white rounded-xl border border-stone-200 p-1">
                             <button onClick={() => handleQuantityChange(item.id, -1)} className="p-1 text-stone-600 hover:bg-stone-50 rounded-lg">
                               <Minus size={14} />
@@ -483,12 +542,12 @@ export default function WaiterDashboard() {
                               <Plus size={14} />
                             </button>
                           </div>
-                        </div>
-                      ) : (
-                        <div className="flex items-center justify-center bg-stone-200 text-stone-600 px-3 py-1.5 rounded-xl font-black text-sm">
-                          {item.quantity}x
-                        </div>
-                      )}
+                        ) : (
+                          <div className="flex items-center justify-center bg-stone-200 text-stone-600 px-3 py-1.5 rounded-xl font-black text-sm">
+                            {item.quantity}x
+                          </div>
+                        )}
+                      </div>
                     </div>
                     {item.notes && <p className="mt-2 text-[10px] text-stone-400 italic">"{item.notes}"</p>}
                   </div>
@@ -497,14 +556,16 @@ export default function WaiterDashboard() {
             </div>
 
             {/* DYNAMIC ACTION BUTTONS */}
-            {hasItemsToConfirm ? (
+            {hasItemsToConfirm && tableOrders.length > 0 && (
               <button 
                 onClick={handleConfirmAndSend}
-                className="w-full mt-8 bg-stone-900 text-white py-4 rounded-2xl font-black shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2"
+                className={`w-full mt-8 text-white py-4 rounded-2xl font-black shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 ${isSelectedTableParcel ? 'bg-purple-600 shadow-purple-200' : 'bg-stone-900'}`}
               >
                 Confirm & Send to Kitchen <ChevronRight size={18} />
               </button>
-            ) : allItemsReadyOrServed ? (
+            )}
+            
+            {allItemsReadyOrServed && tableOrders.length > 0 && (
               <div className="flex gap-3 mt-8">
                 <button 
                   onClick={() => setSelectedTable(null)}
@@ -513,13 +574,15 @@ export default function WaiterDashboard() {
                   Back
                 </button>
                 <button 
-                  onClick={() => setShowPaymentModal(true)} // Open Payment Modal
+                  onClick={() => setShowPaymentModal(true)}
                   className="w-2/3 bg-orange-600 text-white py-4 rounded-2xl font-black shadow-lg shadow-orange-200 active:scale-95 transition-all flex items-center justify-center gap-2"
                 >
                   <Receipt size={18} /> Request Bill
                 </button>
               </div>
-            ) : (
+            )}
+            
+            {!hasItemsToConfirm && !allItemsReadyOrServed && tableOrders.length > 0 && (
               <button 
                 onClick={() => setSelectedTable(null)}
                 className="w-full mt-8 bg-stone-900 text-white py-4 rounded-2xl font-black shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2"
@@ -527,7 +590,7 @@ export default function WaiterDashboard() {
                 Back to Floor <ChevronRight size={18} />
               </button>
             )}
-
+            
           </div>
         </div>
       )}

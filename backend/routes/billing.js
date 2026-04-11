@@ -6,56 +6,104 @@ const router = express.Router();
 // 1. Get All Tables and their Current Status
 router.get("/tables", async (req, res) => {
   try {
-    // Fetch all tables
-    const { data: tables, error: tableErr } = await supabase
+    // 🔥 UPDATE: Added menu_items (name) to the query
+    const { data: tables, error } = await supabase
       .from("tables")
-      .select("*")
-      .order("table_number", { ascending: true });
+      .select(`
+        id,
+        table_number,
+        status,
+        table_sessions (
+          session_id,
+          status,
+          orders (
+            id,
+            order_serves (
+              order_items (
+                price,
+                quantity,
+                menu_items ( name )
+              )
+            )
+          )
+        )
+      `)
+      .order('table_number', { ascending: true });
 
-    if (tableErr) throw tableErr;
+    if (error) throw error;
 
-    // Fetch active/billed sessions
-    const { data: activeSessions, error: sessionErr } = await supabase
-      .from("table_sessions")
-      .select("*")
-      .in("status", ["active", "billed", "billed_cash", "billed_card", "billed_upi"]);
+    const formattedTables = tables.map(t => {
+      const activeSession = t.table_sessions?.find(s => s.status !== 'completed' && s.status !== 'cancelled');
+      
+      let dynamicTotal = 0;
+      let orderId = null;
+      let rawItems = [];
 
-    if (sessionErr) throw sessionErr;
+      // Calculate total and extract items
+      if (activeSession && activeSession.orders && activeSession.orders.length > 0) {
+        const currentOrder = activeSession.orders[0];
+        orderId = currentOrder.id;
+        
+        currentOrder.order_serves?.forEach(serve => {
+          serve.order_items?.forEach(item => {
+            const itemTotal = Number(item.price) * Number(item.quantity);
+            dynamicTotal += itemTotal;
+            
+            if (item.menu_items) {
+               rawItems.push({
+                 name: item.menu_items.name,
+                 quantity: item.quantity,
+                 price: itemTotal // Store the total price for this specific row
+               });
+            }
+          });
+        });
+      }
 
-    // Fetch active orders to get the current total amounts
-    const { data: activeOrders, error: orderErr } = await supabase
-      .from("orders")
-      .select("id, table_id, total_amount, session_id")
-      .neq("order_status", "completed")
-      .neq("order_status", "cancelled");
+      // 🔥 NEW: Consolidate duplicate items for a cleaner bill
+      // (e.g., if they ordered "Water" twice in two different serves, combine them)
+      const consolidatedItems = Object.values(rawItems.reduce((acc, curr) => {
+        if (acc[curr.name]) {
+            acc[curr.name].quantity += curr.quantity;
+            acc[curr.name].price += curr.price;
+        } else {
+            acc[curr.name] = { ...curr };
+        }
+        return acc;
+      }, {}));
 
-    if (orderErr) throw orderErr;
+      // Determine Table Status
+      let displayStatus = "Available";
+      let paymentMethod = null;
 
-    // Map the data together for the frontend
-    const dashboardData = tables.map((table) => {
-      // Find if this table has an active or billed session
-      const session = activeSessions.find(s => s.table_number === table.table_number);
-      // Find the order associated with this table
-      const order = activeOrders.find(o => o.table_id === table.id);
+      if (activeSession) {
+        displayStatus = "Occupied";
+        if (activeSession.status.startsWith("billed")) {
+          displayStatus = "Billed";
+          if (activeSession.status.includes("_")) {
+            paymentMethod = activeSession.status.split("_")[1];
+          }
+        }
+      }
 
       return {
-        id: table.id,
-        tableNumber: table.table_number,
-        status: session ? (session.status.startsWith("billed") ? "Billed" : "Occupied") : "Available",
-        paymentMethod: session && session.status.startsWith("billed_") ? session.status.split("_")[1] : null,
-        sessionId: session ? session.session_id : null,
-        orderId: order ? order.id : null,
-        itemTotal: order ? Number(order.total_amount) : 0,
+        id: t.id,
+        tableNumber: t.table_number,
+        status: displayStatus,
+        paymentMethod: paymentMethod,
+        sessionId: activeSession?.session_id || null,
+        orderId: orderId,
+        itemTotal: dynamicTotal,
+        items: consolidatedItems // 👈 Send the formatted receipt items to the frontend
       };
     });
 
-    res.json({ tables: dashboardData });
+    res.json({ tables: formattedTables });
   } catch (err) {
-    console.error("Billing Dashboard Error:", err);
-    res.status(500).json({ error: "Failed to fetch dashboard data" });
+    console.error("Billing Tables Fetch Error:", err);
+    res.status(500).json({ error: "Failed to fetch tables" });
   }
 });
-
 // 2. Process Checkout & Free the Table
 router.post("/checkout", async (req, res) => {
   const { orderId, sessionId, tableNumber, paymentMethod, finalAmount } = req.body;
