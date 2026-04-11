@@ -103,14 +103,13 @@ function CartProviderInner({ children }: { children: ReactNode }) {
 
   const isUpdatingCart = useRef(false);
   
-  // 🔥 FIX: Treat the parcel selection page as a "lobby" so the Context doesn't block it!
-  const isCustomerRoute = pathname?.startsWith("/customer") && pathname !== "/customer/parcel";
+  // 🔥 FIX: Differentiate between a general customer route and the parcel landing page
+  const isCustomerRoute = pathname?.startsWith("/customer");
+  const isParcelLandingPage = pathname === "/customer/parcel";
 
   // --- 0. GPS GEOFENCE CHECK ---
   useEffect(() => {
     if (!isCustomerRoute) return;
-
-    // 🚨 GPS DISABLED FOR LOCAL TESTING
     setIsLocationValid(true); 
     return;
 
@@ -133,7 +132,7 @@ function CartProviderInner({ children }: { children: ReactNode }) {
           setIsLocationValid(true); 
         } else {
           setLocationMessage(
-            `You are ${Math.round(distance)} meters away. You must be inside the restaurant to place an order.`,
+            `You are ${Math.round(distance)} meters away. You must be inside the restaurant to place an order.`
           );
           setIsLocationValid(false); 
         }
@@ -141,7 +140,7 @@ function CartProviderInner({ children }: { children: ReactNode }) {
       (error) => {
         console.warn("Location error:", error);
         setLocationMessage(
-          "Please allow Location Access in your browser settings to verify you are at the table.",
+          "Please allow Location Access in your browser settings to verify you are at the restaurant."
         );
         setIsLocationValid(false);
       },
@@ -307,7 +306,6 @@ function CartProviderInner({ children }: { children: ReactNode }) {
   const placeCurrentOrder = async () => {
     if (cart.length === 0 || !sessionId) return;
 
-    // 🔥 NEW LOGIC: Prevent multiple serves for Takeaway
     const isParcel = Number(tableNumber) > 100;
     if (isParcel && placedServes.length > 0) {
       alert("Takeaway orders can only be placed once! If you need to add items, please talk to the billing counter.");
@@ -320,7 +318,6 @@ function CartProviderInner({ children }: { children: ReactNode }) {
     );
     const newServeNum = serveCount + 1;
 
-    // Ensure status is waiting_confirmation
     const itemsWithStatus = cart.map((item) => ({
       ...item,
       status: "waiting_confirmation",
@@ -372,23 +369,8 @@ function CartProviderInner({ children }: { children: ReactNode }) {
 
   // --- 5. ROUTE PROTECTION & GEOFENCING LOGIC ---
   if (isCustomerRoute) {
-    if (!tableNumber && isLoaded) {
-      return (
-        <div className="min-h-screen bg-stone-50 flex flex-col items-center justify-center p-6 text-center font-sans">
-          <div className="w-24 h-24 bg-red-50 rounded-full flex items-center justify-center mb-6 border-8 border-red-100">
-            <span className="text-red-500 text-4xl font-black">!</span>
-          </div>
-          <h2 className="text-2xl font-black text-stone-900 mb-2">
-            Table Not Found
-          </h2>
-          <p className="text-stone-500 max-w-xs mx-auto leading-relaxed">
-            Please scan the QR code on your table to view the menu and place an
-            order.
-          </p>
-        </div>
-      );
-    }
-
+    
+    // GPS Step 1: Loading
     if (isLocationValid === null) {
       return (
         <div className="min-h-screen bg-stone-50 flex flex-col items-center justify-center p-6 text-center font-sans">
@@ -403,6 +385,7 @@ function CartProviderInner({ children }: { children: ReactNode }) {
       );
     }
 
+    // GPS Step 2: Blocked
     if (isLocationValid === false) {
       return (
         <div className="min-h-screen bg-stone-50 flex flex-col items-center justify-center p-6 text-center font-sans">
@@ -421,6 +404,24 @@ function CartProviderInner({ children }: { children: ReactNode }) {
           >
             Check Again
           </button>
+        </div>
+      );
+    }
+
+    // Table Step: Block if no table number (UNLESS they are on the parcel landing page)
+    if (!isParcelLandingPage && !tableNumber && isLoaded) {
+      return (
+        <div className="min-h-screen bg-stone-50 flex flex-col items-center justify-center p-6 text-center font-sans">
+          <div className="w-24 h-24 bg-red-50 rounded-full flex items-center justify-center mb-6 border-8 border-red-100">
+            <span className="text-red-500 text-4xl font-black">!</span>
+          </div>
+          <h2 className="text-2xl font-black text-stone-900 mb-2">
+            Table Not Found
+          </h2>
+          <p className="text-stone-500 max-w-xs mx-auto leading-relaxed">
+            Please scan the QR code on your table to view the menu and place an
+            order.
+          </p>
         </div>
       );
     }
