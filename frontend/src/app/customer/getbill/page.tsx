@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { 
   ArrowLeft, Receipt, CheckCircle2, UtensilsCrossed, 
-  IndianRupee, CreditCard, Smartphone, Wallet, Clock
+  IndianRupee, CreditCard, Smartphone, Wallet, Clock, ShoppingBag
 } from "lucide-react";
 import { useCart } from "../component/cartContext";
 
@@ -30,14 +30,16 @@ export default function BillPage() {
     );
   }
 
+  // 🔥 Identify if this is a Parcel
+  const isParcel = Number(tableNumber) > 100;
+
   // Calculate live totals
   const subtotal = placedServes.reduce((acc, serve) => acc + serve.serveTotal, 0);
   const gst = Math.round(subtotal * 0.05);
   const platformFee = 15;
   const grandTotal = subtotal > 0 ? subtotal + gst + platformFee : 0;
 
-  // 🔥 NEW LOGIC: Check if ALL items are ready or served 
-  // (Notice the "as any" bypass to satisfy TypeScript)
+  // Check if ALL items are ready or served 
   const allItems = placedServes.flatMap(serve => serve.items);
   const hasItems = allItems.length > 0;
   const allReadyOrServed = hasItems && allItems.every(
@@ -98,13 +100,20 @@ export default function BillPage() {
   return (
     <div className="min-h-screen bg-stone-50 text-stone-900 flex flex-col font-sans relative">
       <header className="sticky top-0 z-20 bg-stone-50/80 backdrop-blur-md px-6 py-5 flex items-center justify-between border-b border-stone-200/50">
-        <Link href={`/customer/menu?table=${tableNumber}`} className="p-2 bg-white shadow-sm border border-stone-100 hover:bg-stone-100 rounded-full transition-all">
-          <ArrowLeft size={20} className="text-stone-800" />
-        </Link>
+        
+        {/* 🔥 Hide the Back Button for Parcels */}
+        {!isParcel ? (
+          <Link href={`/customer/menu?table=${tableNumber}`} className="p-2 bg-white shadow-sm border border-stone-100 hover:bg-stone-100 rounded-full transition-all">
+            <ArrowLeft size={20} className="text-stone-800" />
+          </Link>
+        ) : (
+          <div className="w-10"></div> // Spacer to keep layout balanced
+        )}
+
         <div className="flex flex-col items-center">
           <h1 className="text-lg font-black text-stone-900 tracking-tight">Your Bill</h1>
-          <span className="text-[10px] bg-stone-200 text-stone-600 px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider mt-1">
-            Table {tableNumber}
+          <span className={`text-[10px] px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider mt-1 ${isParcel ? 'bg-purple-100 text-purple-700' : 'bg-stone-200 text-stone-600'}`}>
+            {isParcel ? `Token ${Number(tableNumber) - 100}` : `Table ${tableNumber}`}
           </span>
         </div>
         <div className="w-10"></div>
@@ -118,17 +127,25 @@ export default function BillPage() {
             </div>
             <h2 className="text-xl font-bold text-stone-900">No items ordered yet</h2>
             <p className="text-sm text-stone-500 mt-2 max-w-50">Place an order from the cart to generate a bill.</p>
-            <Link href={`/customer/menu?table=${tableNumber}`} className="mt-8">
-              <button className="bg-stone-900 hover:bg-stone-800 transition-colors text-white py-3 px-10 rounded-full font-bold shadow-lg shadow-stone-300">
-                Back to Menu
-              </button>
-            </Link>
+            
+            {/* 🔥 Hide the Back to Menu button for Parcels if empty */}
+            {!isParcel && (
+              <Link href={`/customer/menu?table=${tableNumber}`} className="mt-8">
+                <button className="bg-stone-900 hover:bg-stone-800 transition-colors text-white py-3 px-10 rounded-full font-bold shadow-lg shadow-stone-300">
+                  Back to Menu
+                </button>
+              </Link>
+            )}
           </div>
         ) : (
           <div className="max-w-md mx-auto">
             <div className="bg-white rounded-4xl p-6 shadow-sm border border-stone-100 relative overflow-hidden">
               <div className="text-center mb-6 pb-6 border-b border-dashed border-stone-200">
-                <UtensilsCrossed className="mx-auto text-orange-600 mb-2" size={28} />
+                {isParcel ? (
+                  <ShoppingBag className="mx-auto text-purple-600 mb-2" size={28} />
+                ) : (
+                  <UtensilsCrossed className="mx-auto text-orange-600 mb-2" size={28} />
+                )}
                 <h2 className="text-xl font-black text-stone-900">Order Summary</h2>
                 <p className="text-sm text-stone-400 font-medium mt-1">Review your orders</p>
               </div>
@@ -137,7 +154,7 @@ export default function BillPage() {
                 {placedServes.map((serve) => (
                   <div key={serve.serveNumber} className="mb-6 last:mb-0">
                     <h3 className="text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-3 border-b border-stone-100 pb-2">
-                      Serve {serve.serveNumber}
+                      {isParcel ? "Takeaway Order" : `Serve ${serve.serveNumber}`}
                     </h3>
                     <div className="space-y-4">
                       {serve.items.map((item) => (
@@ -147,7 +164,6 @@ export default function BillPage() {
                             <div>
                               <div className="flex items-center gap-2">
                                 <h3 className="font-bold text-stone-700 leading-tight">{item.name}</h3>
-                                {/* 🔥 Notice the 'as any' bypass here too */}
                                 {getStatusBadge((item as any).status)}
                               </div>
                               {item.notes && <p className="text-[10px] text-stone-400 mt-1 uppercase tracking-wider">Note: {item.notes}</p>}
@@ -223,7 +239,9 @@ export default function BillPage() {
         <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-4 transition-opacity">
           <div className="bg-white rounded-[2.5rem] p-6 w-full max-w-sm shadow-2xl animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-200">
             <h3 className="text-xl font-black text-stone-900 mb-1 text-center">How would you like to pay?</h3>
-            <p className="text-stone-500 text-sm text-center mb-6">Select a method so our waiter brings the right machine.</p>
+            <p className="text-stone-500 text-sm text-center mb-6">
+              {isParcel ? "Select a method to pay at the counter." : "Select a method so our waiter brings the right machine."}
+            </p>
             
             <div className="space-y-3">
               <button onClick={() => handleRequestBill("upi")} className="w-full flex items-center justify-between p-4 rounded-2xl border-2 border-stone-100 hover:border-purple-500 hover:bg-purple-50 transition-colors active:scale-[0.98]">
@@ -259,7 +277,7 @@ export default function BillPage() {
             <div className="bg-orange-50 rounded-2xl p-4 mb-2 border border-orange-100 flex items-start gap-3 text-left">
               <Wallet className="text-orange-500 shrink-0 mt-0.5" size={20} />
               <p className="text-sm text-stone-700 font-medium leading-relaxed">
-                The billing desk has been alerted. A waiter will bring your bill to the table shortly.
+                {isParcel ? "Please proceed to the billing counter to process your payment and collect your takeaway." : "The billing desk has been alerted. A waiter will bring your bill to the table shortly."}
               </p>
             </div>
           </div>

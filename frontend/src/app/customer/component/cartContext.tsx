@@ -88,7 +88,7 @@ function CartProviderInner({ children }: { children: ReactNode }) {
   const urlTable = searchParams.get("table");
 
   const apiUrl =
-    process.env.NEXT_PUBLIC_API_URL || "http://172.18.170.244:5000";
+    process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
   const [cart, setCart] = useState<CartItem[]>([]);
   const [placedServes, setPlacedServes] = useState<PlacedServe[]>([]);
@@ -102,14 +102,15 @@ function CartProviderInner({ children }: { children: ReactNode }) {
   const [locationMessage, setLocationMessage] = useState<string>("");
 
   const isUpdatingCart = useRef(false);
-  const isCustomerRoute = pathname?.startsWith("/customer");
+  
+  // 🔥 FIX: Treat the parcel selection page as a "lobby" so the Context doesn't block it!
+  const isCustomerRoute = pathname?.startsWith("/customer") && pathname !== "/customer/parcel";
 
   // --- 0. GPS GEOFENCE CHECK ---
   useEffect(() => {
     if (!isCustomerRoute) return;
 
     // 🚨 GPS DISABLED FOR LOCAL TESTING
-    // (To turn GPS back on for production, just delete the next two lines!)
     setIsLocationValid(true); 
     return;
 
@@ -306,15 +307,28 @@ function CartProviderInner({ children }: { children: ReactNode }) {
   const placeCurrentOrder = async () => {
     if (cart.length === 0 || !sessionId) return;
 
+    // 🔥 NEW LOGIC: Prevent multiple serves for Takeaway
+    const isParcel = Number(tableNumber) > 100;
+    if (isParcel && placedServes.length > 0) {
+      alert("Takeaway orders can only be placed once! If you need to add items, please talk to the billing counter.");
+      return;
+    }
+
     const serveTotal = cart.reduce(
       (acc, item) => acc + item.price * item.quantity,
       0,
     );
     const newServeNum = serveCount + 1;
 
+    // Ensure status is waiting_confirmation
+    const itemsWithStatus = cart.map((item) => ({
+      ...item,
+      status: "waiting_confirmation",
+    }));
+
     const newServe: PlacedServe = {
       serveNumber: newServeNum,
-      items: [...cart],
+      items: itemsWithStatus,
       serveTotal: serveTotal,
       sessionId: sessionId,
     };

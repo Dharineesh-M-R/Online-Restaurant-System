@@ -296,5 +296,22 @@ router.post("/:sessionId/cancel", async (req, res) => {
     res.status(500).json({ error: "Failed to cancel session" });
   }
 });
+// NEW: Fetch available parcel tokens (Tables > 100)
+router.get("/available-parcels", async (req, res) => {
+  try {
+    const { data: tables, error } = await supabase
+      .from("tables")
+      .select("table_number")
+      .gt("table_number", 100)
+      .eq("status", "available")
+      .order("table_number", { ascending: true });
+
+    if (error) throw error;
+    res.json({ parcels: tables.map(t => t.table_number) });
+  } catch (err) {
+    console.error("Fetch Parcels Error:", err);
+    res.status(500).json({ error: "Failed to fetch parcels" });
+  }
+});
 
 export default router;

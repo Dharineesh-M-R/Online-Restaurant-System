@@ -19,7 +19,8 @@ import {
   Smartphone,
   CreditCard,
   IndianRupee,
-  ArrowLeft
+  ArrowLeft,
+  ShoppingBag // 🔥 Added ShoppingBag for parcels
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -87,6 +88,7 @@ export default function WaiterDashboard() {
       const res = await fetch(`${apiUrl}/admin/waiter/tasks?t=${Date.now()}`, { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
+        // Allow waiters to see parcels again so they can verify them
         setReadyItems(data.tasks);
       }
     } catch (err) {
@@ -101,6 +103,7 @@ export default function WaiterDashboard() {
       const res = await fetch(`${apiUrl}/admin/waiter/floor-plan?t=${Date.now()}`, { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
+        // Allow waiters to see parcels again so they can verify them
         setFloorTables(data.tables);
       }
     } catch (err) {
@@ -275,10 +278,14 @@ export default function WaiterDashboard() {
     );
   }
 
+  // --- LOGIC GATES FOR BUTTON RENDER ---
   const hasItemsToConfirm = tableOrders.some(item => item.status === 'waiting_confirmation');
   
   const allItemsReadyOrServed = tableOrders.length > 0 && 
     tableOrders.every(item => item.status === 'ready' || item.status === 'served');
+
+  // 🔥 IDENTIFY PARCEL
+  const isSelectedTableParcel = selectedTable !== null && selectedTable > 100;
 
   return (
     <div className="min-h-screen bg-stone-50 text-stone-900 pb-24 font-sans">
@@ -317,41 +324,50 @@ export default function WaiterDashboard() {
                 <p className="text-sm text-stone-500 mt-2">No food is waiting in the kitchen.</p>
               </div>
             ) : (
-              Object.entries(groupedTasks).map(([tableNum, items]) => (
-                <div key={tableNum} className="bg-white rounded-3xl p-5 shadow-sm border border-stone-100">
-                  <div className="flex justify-between items-center mb-4 border-b border-stone-100 pb-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-orange-600 rounded-full flex items-center justify-center text-white font-black text-lg shadow-md">
-                        {tableNum}
-                      </div>
-                      <h3 className="font-bold text-stone-900">Table {tableNum}</h3>
-                    </div>
-                    <div className="flex items-center text-xs font-bold text-orange-500 bg-orange-50 px-2.5 py-1 rounded-md">
-                      <Clock size={12} className="mr-1" /> Ready
-                    </div>
-                  </div>
-
-                  <div className="space-y-3">
-                    {items.map((item) => (
-                      <div key={item.id} className="flex justify-between items-center gap-3 bg-stone-50 p-3 rounded-2xl">
-                        <div className="flex items-start gap-3">
-                          <span className="font-black text-stone-900">{item.quantity}x</span>
-                          <div>
-                            <p className="font-bold text-stone-800 leading-tight">{item.name}</p>
-                            <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider mt-0.5">Serve {item.serveNumber}</p>
-                          </div>
+              Object.entries(groupedTasks).map(([tableNum, items]) => {
+                // 🔥 UI check for Parcel Tasks
+                const isParcel = Number(tableNum) > 100;
+                
+                return (
+                  <div key={tableNum} className={`bg-white rounded-3xl p-5 shadow-sm border ${isParcel ? 'border-purple-200 shadow-purple-50' : 'border-stone-100'}`}>
+                    <div className="flex justify-between items-center mb-4 border-b border-stone-100 pb-3">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-black text-lg shadow-md ${isParcel ? 'bg-purple-600' : 'bg-orange-600'}`}>
+                          {isParcel ? <ShoppingBag size={18} /> : tableNum}
                         </div>
-                        <button
-                          onClick={() => markAsServed(item.id)}
-                          className="w-10 h-10 bg-stone-900 text-white rounded-xl flex items-center justify-center active:scale-90 transition-transform shadow-md"
-                        >
-                          <CheckCircle2 size={18} strokeWidth={3} />
-                        </button>
+                        <div>
+                          <h3 className="font-bold text-stone-900">{isParcel ? `Parcel #${Number(tableNum) - 100}` : `Table ${tableNum}`}</h3>
+                          {isParcel && <p className="text-[10px] text-purple-600 font-bold uppercase tracking-wider">Takeaway</p>}
+                        </div>
                       </div>
-                    ))}
+                      <div className="flex items-center text-xs font-bold text-orange-500 bg-orange-50 px-2.5 py-1 rounded-md">
+                        <Clock size={12} className="mr-1" /> Ready
+                      </div>
+                    </div>
+
+                    <div className="space-y-3">
+                      {items.map((item) => (
+                        <div key={item.id} className="flex justify-between items-center gap-3 bg-stone-50 p-3 rounded-2xl">
+                          <div className="flex items-start gap-3">
+                            <span className="font-black text-stone-900">{item.quantity}x</span>
+                            <div>
+                              <p className="font-bold text-stone-800 leading-tight">{item.name}</p>
+                              {/* Only show serve number for non-parcels */}
+                              {!isParcel && <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider mt-0.5">Serve {item.serveNumber}</p>}
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => markAsServed(item.id)}
+                            className={`w-10 h-10 text-white rounded-xl flex items-center justify-center active:scale-90 transition-transform shadow-md ${isParcel ? 'bg-purple-600' : 'bg-stone-900'}`}
+                          >
+                            <CheckCircle2 size={18} strokeWidth={3} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              ))
+                )
+              })
             )}
           </div>
         )}
@@ -360,54 +376,63 @@ export default function WaiterDashboard() {
         {activeTab === "tables" && (
           <div className="animate-in fade-in duration-500">
             <div className="grid grid-cols-3 gap-4">
-              {floorTables.map((table) => (
-                <div 
-                  key={table.number}
-                  onClick={() => viewTableDetails(table.number, table.isOccupied)}
-                  className={`
-                    relative aspect-square rounded-3xl flex flex-col items-center justify-center border-2 transition-all duration-300 cursor-pointer
-                    ${table.hasUnconfirmed 
-                      ? "bg-blue-50 border-blue-500 animate-pulse shadow-lg shadow-blue-100" 
-                      : table.needsHelp 
-                        ? "bg-red-50 border-red-500 shadow-lg shadow-red-100 animate-pulse" 
-                        : table.isOccupied 
-                          ? "bg-orange-50 border-orange-200 shadow-sm active:scale-95" 
-                          : "bg-white border-stone-100 opacity-60 cursor-default"}
-                  `}
-                >
-                  <span className={`text-2xl font-black 
-                    ${table.hasUnconfirmed ? "text-blue-600" : 
-                      table.needsHelp ? "text-red-600" : 
-                      table.isOccupied ? "text-orange-600" : "text-stone-300"}`}>
-                    {table.number}
-                  </span>
-                  
-                  {table.needsHelp ? (
-                    <button 
-                      onClick={(e) => attendTable(e, table.number)}
-                      className="mt-2 bg-red-600 text-white px-2 py-1 rounded-lg text-[8px] font-black uppercase flex items-center gap-1 shadow-lg shadow-red-200 active:scale-90 transition-transform"
-                    >
-                      <Hand size={10} /> Attended
-                    </button>
-                  ) : (
-                    <div className="flex items-center gap-1 mt-1">
-                      {table.isOccupied && <UserCheck size={10} className={table.hasUnconfirmed ? "text-blue-400" : "text-orange-400"} />}
-                      <span className={`text-[10px] font-bold uppercase tracking-tighter 
-                        ${table.hasUnconfirmed ? "text-blue-500" : 
-                          table.isOccupied ? "text-orange-400" : "text-stone-300"}`}>
-                        {table.hasUnconfirmed ? "New Order" : table.isOccupied ? "Active" : "Vacant"}
+              {floorTables.map((table) => {
+                // 🔥 UI Check for Parcel Floor Plan
+                const isParcel = table.number > 100;
+                
+                return (
+                  <div 
+                    key={table.number}
+                    onClick={() => viewTableDetails(table.number, table.isOccupied)}
+                    className={`
+                      relative aspect-square rounded-3xl flex flex-col items-center justify-center border-2 transition-all duration-300 cursor-pointer
+                      ${table.hasUnconfirmed 
+                        ? (isParcel ? "bg-purple-50 border-purple-500 animate-pulse shadow-lg shadow-purple-100" : "bg-blue-50 border-blue-500 animate-pulse shadow-lg shadow-blue-100") 
+                        : table.needsHelp 
+                          ? "bg-red-50 border-red-500 shadow-lg shadow-red-100 animate-pulse" 
+                          : table.isOccupied 
+                            ? (isParcel ? "bg-purple-50 border-purple-200 shadow-sm active:scale-95" : "bg-orange-50 border-orange-200 shadow-sm active:scale-95") 
+                            : "bg-white border-stone-100 opacity-60 cursor-default"}
+                    `}
+                  >
+                    {isParcel ? (
+                      <ShoppingBag size={24} className={table.hasUnconfirmed ? "text-purple-600" : table.needsHelp ? "text-red-600" : table.isOccupied ? "text-purple-500" : "text-stone-300"} />
+                    ) : (
+                      <span className={`text-2xl font-black 
+                        ${table.hasUnconfirmed ? "text-blue-600" : 
+                          table.needsHelp ? "text-red-600" : 
+                          table.isOccupied ? "text-orange-600" : "text-stone-300"}`}>
+                        {table.number}
                       </span>
-                    </div>
-                  )}
-                </div>
-              ))}
+                    )}
+                    
+                    {table.needsHelp ? (
+                      <button 
+                        onClick={(e) => attendTable(e, table.number)}
+                        className="mt-2 bg-red-600 text-white px-2 py-1 rounded-lg text-[8px] font-black uppercase flex items-center gap-1 shadow-lg shadow-red-200 active:scale-90 transition-transform"
+                      >
+                        <Hand size={10} /> Attended
+                      </button>
+                    ) : (
+                      <div className="flex items-center gap-1 mt-1">
+                        {!isParcel && table.isOccupied && <UserCheck size={10} className={table.hasUnconfirmed ? "text-blue-400" : "text-orange-400"} />}
+                        <span className={`text-[10px] font-bold uppercase tracking-tighter 
+                          ${table.hasUnconfirmed ? (isParcel ? "text-purple-500" : "text-blue-500") : 
+                            table.isOccupied ? (isParcel ? "text-purple-400" : "text-orange-400") : "text-stone-300"}`}>
+                          {isParcel ? `Token ${table.number - 100}` : (table.hasUnconfirmed ? "New Order" : table.isOccupied ? "Active" : "Vacant")}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
             </div>
 
+            {/* Legend */}
             <div className="mt-10 p-4 bg-white rounded-2xl border border-stone-100 shadow-sm flex flex-wrap justify-around gap-y-3 text-[10px] font-bold uppercase tracking-wider">
               <div className="flex items-center gap-2"><div className="w-3 h-3 bg-stone-200 rounded-full"></div> Vacant</div>
-              <div className="flex items-center gap-2"><div className="w-3 h-3 bg-orange-500 rounded-full"></div> Occupied</div>
-              <div className="flex items-center gap-2"><div className="w-3 h-3 bg-blue-500 rounded-full animate-pulse"></div> New Order</div>
-              <div className="flex items-center gap-2"><div className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div> Call Waiter</div>
+              <div className="flex items-center gap-2"><div className="w-3 h-3 bg-orange-500 rounded-full"></div> Occupied Table</div>
+              <div className="flex items-center gap-2"><div className="w-3 h-3 bg-purple-500 rounded-full"></div> Takeaway Order</div>
             </div>
           </div>
         )}
@@ -420,8 +445,12 @@ export default function WaiterDashboard() {
             
             <div className="flex justify-between items-start mb-6">
               <div>
-                <h2 className="text-3xl font-black text-stone-900 italic">Table {selectedTable}</h2>
-                <p className="text-xs font-bold text-orange-500 uppercase tracking-widest mt-1">Order Summary</p>
+                <h2 className={`text-3xl font-black italic ${isSelectedTableParcel ? 'text-purple-900' : 'text-stone-900'}`}>
+                  {isSelectedTableParcel ? `Parcel #${selectedTable - 100}` : `Table ${selectedTable}`}
+                </h2>
+                <p className={`text-xs font-bold uppercase tracking-widest mt-1 ${isSelectedTableParcel ? 'text-purple-500' : 'text-orange-500'}`}>
+                  Verify Order
+                </p>
               </div>
               <button 
                 onClick={() => setSelectedTable(null)}
@@ -441,23 +470,21 @@ export default function WaiterDashboard() {
                 <div className="py-12 text-center text-stone-400 font-bold uppercase text-xs">No active items</div>
               ) : (
                 tableOrders.map((item) => (
-                  <div key={item.id} className={`p-4 rounded-2xl border transition-colors ${item.status === 'waiting_confirmation' ? 'bg-blue-50/50 border-blue-100' : 'bg-stone-50 border-stone-100'}`}>
+                  <div key={item.id} className={`p-4 rounded-2xl border transition-colors ${item.status === 'waiting_confirmation' ? (isSelectedTableParcel ? 'bg-purple-50 border-purple-100' : 'bg-blue-50/50 border-blue-100') : 'bg-stone-50 border-stone-100'}`}>
                     <div className="flex justify-between items-start">
                       <div className="flex-1 pr-2">
                         <div className="flex items-center gap-2">
                           <p className="font-bold text-stone-800 leading-tight">{item.name}</p>
                           {item.status === 'waiting_confirmation' && (
-                            <span className="text-[8px] bg-blue-600 text-white px-1.5 py-0.5 rounded font-black uppercase tracking-tighter">New</span>
+                            <span className={`text-[8px] text-white px-1.5 py-0.5 rounded font-black uppercase tracking-tighter ${isSelectedTableParcel ? 'bg-purple-600' : 'bg-blue-600'}`}>New</span>
                           )}
                         </div>
                         <p className="text-[10px] font-bold text-stone-400 mt-1 uppercase tracking-tighter">
-                          Serve {item.serve} • Status: <span className={item.status === 'waiting_confirmation' ? 'text-blue-500' : 'text-stone-500'}>{item.status.replace('_', ' ')}</span>
+                          {!isSelectedTableParcel && `Serve ${item.serve} • `}Status: <span className={item.status === 'waiting_confirmation' ? (isSelectedTableParcel ? 'text-purple-500' : 'text-blue-500') : 'text-stone-500'}>{item.status.replace('_', ' ')}</span>
                         </p>
                       </div>
 
-                      {/* EDITABLE CONTROLS */}
                       <div className="flex items-center gap-3">
-                        {/* TRASH ICON: Visible if waiting_confirmation OR pending (Out of stock fallback) */}
                         {(item.status === 'waiting_confirmation' || item.status === 'pending') && (
                           <button 
                             onClick={async () => {
@@ -474,7 +501,6 @@ export default function WaiterDashboard() {
                           </button>
                         )}
                         
-                        {/* QUANTITY CONTROLS: Only visible for waiting_confirmation */}
                         {item.status === 'waiting_confirmation' ? (
                           <div className="flex items-center bg-white rounded-xl border border-stone-200 p-1">
                             <button onClick={() => handleQuantityChange(item.id, -1)} className="p-1 text-stone-600 hover:bg-stone-50 rounded-lg">
@@ -502,7 +528,7 @@ export default function WaiterDashboard() {
             {hasItemsToConfirm ? (
               <button 
                 onClick={handleConfirmAndSend}
-                className="w-full mt-8 bg-stone-900 text-white py-4 rounded-2xl font-black shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2"
+                className={`w-full mt-8 text-white py-4 rounded-2xl font-black shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 ${isSelectedTableParcel ? 'bg-purple-600 shadow-purple-200' : 'bg-stone-900'}`}
               >
                 Confirm & Send to Kitchen <ChevronRight size={18} />
               </button>
@@ -536,7 +562,7 @@ export default function WaiterDashboard() {
 
       {/* --- PAYMENT SELECTION MODAL --- */}
       {showPaymentModal && (
-        <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center z-60 p-4 transition-opacity">
+        <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center z-[60] p-4 transition-opacity">
           <div className="bg-white rounded-[2.5rem] p-6 w-full max-w-sm shadow-2xl animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-200">
             <h3 className="text-xl font-black text-stone-900 mb-1 text-center">Customer Payment</h3>
             <p className="text-stone-500 text-sm text-center mb-6">Select how the customer wants to pay.</p>
@@ -544,14 +570,17 @@ export default function WaiterDashboard() {
             <div className="space-y-3">
               <button onClick={() => executeBillRequest("upi")} className="w-full flex items-center justify-between p-4 rounded-2xl border-2 border-stone-100 hover:border-purple-500 hover:bg-purple-50 transition-colors active:scale-[0.98]">
                 <div className="flex items-center gap-3"><Smartphone size={24} className="text-purple-600" /><span className="font-bold text-stone-900">UPI / QR Code</span></div>
+                <ArrowLeft size={16} className="text-stone-300 rotate-180" />
               </button>
               
               <button onClick={() => executeBillRequest("card")} className="w-full flex items-center justify-between p-4 rounded-2xl border-2 border-stone-100 hover:border-blue-500 hover:bg-blue-50 transition-colors active:scale-[0.98]">
                 <div className="flex items-center gap-3"><CreditCard size={24} className="text-blue-600" /><span className="font-bold text-stone-900">Credit / Debit Card</span></div>
+                <ArrowLeft size={16} className="text-stone-300 rotate-180" />
               </button>
 
               <button onClick={() => executeBillRequest("cash")} className="w-full flex items-center justify-between p-4 rounded-2xl border-2 border-stone-100 hover:border-green-500 hover:bg-green-50 transition-colors active:scale-[0.98]">
                 <div className="flex items-center gap-3"><IndianRupee size={24} className="text-green-600" /><span className="font-bold text-stone-900">Cash</span></div>
+                <ArrowLeft size={16} className="text-stone-300 rotate-180" />
               </button>
             </div>
             
