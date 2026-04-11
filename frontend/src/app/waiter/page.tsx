@@ -19,8 +19,7 @@ import {
   Smartphone,
   CreditCard,
   IndianRupee,
-  ArrowLeft,
-  ShoppingBag // 🔥 Added ShoppingBag for parcels
+  ShoppingBag
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -57,6 +56,7 @@ export default function WaiterDashboard() {
 
   // Modal State
   const [selectedTable, setSelectedTable] = useState<number | null>(null);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null); // 🔥 Added session ID state
   const [tableOrders, setTableOrders] = useState<OrderSummaryItem[]>([]);
   const [isModalLoading, setIsModalLoading] = useState(false);
   
@@ -88,7 +88,6 @@ export default function WaiterDashboard() {
       const res = await fetch(`${apiUrl}/admin/waiter/tasks?t=${Date.now()}`, { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
-        // Allow waiters to see parcels again so they can verify them
         setReadyItems(data.tasks);
       }
     } catch (err) {
@@ -103,7 +102,6 @@ export default function WaiterDashboard() {
       const res = await fetch(`${apiUrl}/admin/waiter/floor-plan?t=${Date.now()}`, { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
-        // Allow waiters to see parcels again so they can verify them
         setFloorTables(data.tables);
       }
     } catch (err) {
@@ -121,6 +119,7 @@ export default function WaiterDashboard() {
       if (res.ok) {
         const data = await res.json();
         setTableOrders(data.items);
+        setActiveSessionId(data.sessionId); // 🔥 Save the session ID
       }
     } catch (err) {
       console.error("Error fetching table items", err);
@@ -134,6 +133,7 @@ export default function WaiterDashboard() {
       const res = await fetch(`${apiUrl}/admin/waiter/table-details/${tableNum}?t=${Date.now()}`, { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
+        setActiveSessionId(data.sessionId); // Ensure it stays synced
         setTableOrders((prevOrders) => {
           return data.items.map((newItem: OrderSummaryItem) => {
             const existingLocalItem = prevOrders.find(prev => prev.id === newItem.id);
@@ -263,6 +263,32 @@ export default function WaiterDashboard() {
     }
   };
 
+  // 🔥 NEW LOGIC: Clear Ghost Session
+  const handleClearEmptyTable = async () => {
+    if (!selectedTable || !activeSessionId) return;
+    
+    const confirm = window.confirm(
+      `Are you sure you want to clear Table ${selectedTable}? This will cancel their session.`
+    );
+    if (!confirm) return;
+
+    try {
+      const res = await fetch(`${apiUrl}/sessions/${activeSessionId}/cancel`, { 
+        method: "POST" 
+      });
+      
+      if (res.ok) {
+        setSelectedTable(null);
+        setActiveSessionId(null);
+        fetchFloorPlan(); // Refresh right away to show table is vacant
+      } else {
+        alert("Failed to cancel the session.");
+      }
+    } catch (err) {
+      console.error("Error clearing empty table", err);
+    }
+  };
+
   const groupedTasks = readyItems.reduce((acc, item) => {
     if (!acc[item.tableNumber]) acc[item.tableNumber] = [];
     acc[item.tableNumber].push(item);
@@ -284,7 +310,6 @@ export default function WaiterDashboard() {
   const allItemsReadyOrServed = tableOrders.length > 0 && 
     tableOrders.every(item => item.status === 'ready' || item.status === 'served');
 
-  // 🔥 IDENTIFY PARCEL
   const isSelectedTableParcel = selectedTable !== null && selectedTable > 100;
 
   return (
@@ -325,7 +350,6 @@ export default function WaiterDashboard() {
               </div>
             ) : (
               Object.entries(groupedTasks).map(([tableNum, items]) => {
-                // 🔥 UI check for Parcel Tasks
                 const isParcel = Number(tableNum) > 100;
                 
                 return (
@@ -352,7 +376,6 @@ export default function WaiterDashboard() {
                             <span className="font-black text-stone-900">{item.quantity}x</span>
                             <div>
                               <p className="font-bold text-stone-800 leading-tight">{item.name}</p>
-                              {/* Only show serve number for non-parcels */}
                               {!isParcel && <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider mt-0.5">Serve {item.serveNumber}</p>}
                             </div>
                           </div>
@@ -377,7 +400,6 @@ export default function WaiterDashboard() {
           <div className="animate-in fade-in duration-500">
             <div className="grid grid-cols-3 gap-4">
               {floorTables.map((table) => {
-                // 🔥 UI Check for Parcel Floor Plan
                 const isParcel = table.number > 100;
                 
                 return (
@@ -467,7 +489,16 @@ export default function WaiterDashboard() {
                   <p className="font-bold">Fetching details...</p>
                 </div>
               ) : tableOrders.length === 0 ? (
-                <div className="py-12 text-center text-stone-400 font-bold uppercase text-xs">No active items</div>
+                // 🔥 NEW UI: Clear Ghost Session Button
+                <div className="py-12 flex flex-col items-center justify-center">
+                  <p className="text-center text-stone-400 font-bold uppercase text-xs mb-6">No active items</p>
+                  <button 
+                    onClick={handleClearEmptyTable}
+                    className="text-red-600 bg-red-50 hover:bg-red-100 px-6 py-3 rounded-2xl font-bold text-sm transition-colors flex items-center gap-2 active:scale-95"
+                  >
+                    <Trash2 size={16} /> Clear Empty Table (Cancel Session)
+                  </button>
+                </div>
               ) : (
                 tableOrders.map((item) => (
                   <div key={item.id} className={`p-4 rounded-2xl border transition-colors ${item.status === 'waiting_confirmation' ? (isSelectedTableParcel ? 'bg-purple-50 border-purple-100' : 'bg-blue-50/50 border-blue-100') : 'bg-stone-50 border-stone-100'}`}>
@@ -525,14 +556,16 @@ export default function WaiterDashboard() {
             </div>
 
             {/* DYNAMIC ACTION BUTTONS */}
-            {hasItemsToConfirm ? (
+            {hasItemsToConfirm && tableOrders.length > 0 && (
               <button 
                 onClick={handleConfirmAndSend}
                 className={`w-full mt-8 text-white py-4 rounded-2xl font-black shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 ${isSelectedTableParcel ? 'bg-purple-600 shadow-purple-200' : 'bg-stone-900'}`}
               >
                 Confirm & Send to Kitchen <ChevronRight size={18} />
               </button>
-            ) : allItemsReadyOrServed ? (
+            )}
+            
+            {allItemsReadyOrServed && tableOrders.length > 0 && (
               <div className="flex gap-3 mt-8">
                 <button 
                   onClick={() => setSelectedTable(null)}
@@ -547,7 +580,9 @@ export default function WaiterDashboard() {
                   <Receipt size={18} /> Request Bill
                 </button>
               </div>
-            ) : (
+            )}
+            
+            {!hasItemsToConfirm && !allItemsReadyOrServed && tableOrders.length > 0 && (
               <button 
                 onClick={() => setSelectedTable(null)}
                 className="w-full mt-8 bg-stone-900 text-white py-4 rounded-2xl font-black shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2"
@@ -555,14 +590,14 @@ export default function WaiterDashboard() {
                 Back to Floor <ChevronRight size={18} />
               </button>
             )}
-
+            
           </div>
         </div>
       )}
 
       {/* --- PAYMENT SELECTION MODAL --- */}
       {showPaymentModal && (
-        <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center z-[60] p-4 transition-opacity">
+        <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center z-60 p-4 transition-opacity">
           <div className="bg-white rounded-[2.5rem] p-6 w-full max-w-sm shadow-2xl animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-200">
             <h3 className="text-xl font-black text-stone-900 mb-1 text-center">Customer Payment</h3>
             <p className="text-stone-500 text-sm text-center mb-6">Select how the customer wants to pay.</p>
@@ -570,17 +605,14 @@ export default function WaiterDashboard() {
             <div className="space-y-3">
               <button onClick={() => executeBillRequest("upi")} className="w-full flex items-center justify-between p-4 rounded-2xl border-2 border-stone-100 hover:border-purple-500 hover:bg-purple-50 transition-colors active:scale-[0.98]">
                 <div className="flex items-center gap-3"><Smartphone size={24} className="text-purple-600" /><span className="font-bold text-stone-900">UPI / QR Code</span></div>
-                <ArrowLeft size={16} className="text-stone-300 rotate-180" />
               </button>
               
               <button onClick={() => executeBillRequest("card")} className="w-full flex items-center justify-between p-4 rounded-2xl border-2 border-stone-100 hover:border-blue-500 hover:bg-blue-50 transition-colors active:scale-[0.98]">
                 <div className="flex items-center gap-3"><CreditCard size={24} className="text-blue-600" /><span className="font-bold text-stone-900">Credit / Debit Card</span></div>
-                <ArrowLeft size={16} className="text-stone-300 rotate-180" />
               </button>
 
               <button onClick={() => executeBillRequest("cash")} className="w-full flex items-center justify-between p-4 rounded-2xl border-2 border-stone-100 hover:border-green-500 hover:bg-green-50 transition-colors active:scale-[0.98]">
                 <div className="flex items-center gap-3"><IndianRupee size={24} className="text-green-600" /><span className="font-bold text-stone-900">Cash</span></div>
-                <ArrowLeft size={16} className="text-stone-300 rotate-180" />
               </button>
             </div>
             
