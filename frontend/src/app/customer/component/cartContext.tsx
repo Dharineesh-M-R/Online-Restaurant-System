@@ -54,6 +54,7 @@ interface CartContextType {
   placedServes: PlacedServe[];
   placeCurrentOrder: () => void;
   cancelSession: () => Promise<void>;
+  sessionStatus: string | null;
 }
 
 // --- GPS MATH HELPERS ---
@@ -106,6 +107,7 @@ function CartProviderInner({ children }: { children: ReactNode }) {
   // 🔥 FIX: Differentiate between a general customer route and the parcel landing page
   const isCustomerRoute = pathname?.startsWith("/customer");
   const isParcelLandingPage = pathname === "/customer/parcel";
+  const [sessionStatus, setSessionStatus] = useState<string | null>(null);
 
   // --- 0. GPS GEOFENCE CHECK ---
   useEffect(() => {
@@ -230,6 +232,7 @@ function CartProviderInner({ children }: { children: ReactNode }) {
           setCart(data.cart);
           setPlacedServes(data.serves);
           setServeCount(data.serves.length);
+          setSessionStatus(data.sessionStatus);
         }
       } catch (err) {
         console.error("Failed to sync table data", err);
@@ -444,6 +447,7 @@ function CartProviderInner({ children }: { children: ReactNode }) {
         placedServes,
         placeCurrentOrder,
         cancelSession,
+        sessionStatus,
       }}
     >
       {children}

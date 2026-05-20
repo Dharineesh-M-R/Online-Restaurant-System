@@ -96,7 +96,8 @@ router.get("/floor-plan", async (req, res) => {
         number: t.table_number,
         isOccupied: !!activeSession,
         needsHelp: activeSession?.needs_waiter || false,
-        hasUnconfirmed: hasUnconfirmed
+        hasUnconfirmed: hasUnconfirmed,
+        sessionStatus: activeSession?.status || null
       };
     });
 
@@ -114,7 +115,7 @@ router.get("/table-details/:tableNumber", async (req, res) => {
   try {
     const { data: session, error: sessionError } = await supabase
       .from("table_sessions")
-      .select("session_id")
+      .select("session_id, status")
       .eq("table_number", tableNumber)
       .neq("status", "completed") 
       .neq("status", "cancelled")
@@ -152,7 +153,7 @@ router.get("/table-details/:tableNumber", async (req, res) => {
     }));
 
     // 🔥 FIX: Returning sessionId so the Waiter frontend can cancel ghost sessions
-    res.json({ sessionId: session.session_id, items: formattedItems });
+    res.json({ sessionId: session.session_id,sessionStatus: session.status, items: formattedItems });
   } catch (err) {
     console.error("Table Details Error:", err);
     res.status(500).json({ error: "Internal server error" });

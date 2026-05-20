@@ -44,7 +44,7 @@ router.get("/:sessionId/sync", async (req, res) => {
   try {
     const { data: sessionData, error: sessionErr } = await supabase
       .from("table_sessions")
-      .select("table_number, cart_items")
+      .select("table_number, cart_items, status")
       .eq("session_id", sessionId)
       .neq("status", "completed")
       .neq("status", "cancelled") // 🔥 FIX: Forces a 404 if the session was force closed!
@@ -121,7 +121,8 @@ router.get("/:sessionId/sync", async (req, res) => {
 
     res.json({
       cart: sessionData.cart_items || [],
-      serves: formattedServes
+      serves: formattedServes,
+      sessionStatus: sessionData.status
     });
   } catch (err) {
     console.error("Sync Error:", err);
@@ -160,7 +161,7 @@ router.post("/:sessionId/orders", async (req, res) => {
       .select("table_number")
       .eq("session_id", sessionId)
       .neq("status", "completed")
-      .neq("status", "cancelled") // 🔥 FIX: Blocks orders on dead sessions
+      .neq("status", "cancelled") 
       .single();
       
     if (sessionErr) throw sessionErr;
@@ -296,18 +297,36 @@ router.post("/:sessionId/cancel", async (req, res) => {
     res.status(500).json({ error: "Failed to cancel session" });
   }
 });
-// NEW: Fetch available parcel tokens (Tables > 100)
+
+// 🔥 NEW & IMPROVED: Fetch available parcel tokens (Tables > 100)
 router.get("/available-parcels", async (req, res) => {
   try {
-    const { data: tables, error } = await supabase
+    // 1. Get all parcel tables
+    const { data: tables, error: tablesErr } = await supabase
       .from("tables")
       .select("table_number")
       .gt("table_number", 100)
-      .eq("status", "available")
       .order("table_number", { ascending: true });
 
-    if (error) throw error;
-    res.json({ parcels: tables.map(t => t.table_number) });
+    if (tablesErr) throw tablesErr;
+
+    // 2. Get active sessions for parcels
+    const { data: activeSessions, error: sessionsErr } = await supabase
+      .from("table_sessions")
+      .select("table_number")
+      .gt("table_number", 100)
+      .neq("status", "completed")
+      .neq("status", "cancelled");
+
+    if (sessionsErr) throw sessionsErr;
+
+    // 3. Filter out tables that already have an active session
+    const busyTableNumbers = activeSessions.map(s => s.table_number);
+    const availableParcels = tables
+        .map(t => t.table_number)
+        .filter(num => !busyTableNumbers.includes(num));
+
+    res.json({ parcels: availableParcels });
   } catch (err) {
     console.error("Fetch Parcels Error:", err);
     res.status(500).json({ error: "Failed to fetch parcels" });

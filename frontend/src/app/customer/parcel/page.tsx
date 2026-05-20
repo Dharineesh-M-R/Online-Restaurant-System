@@ -25,7 +25,13 @@ export default function ParcelSelectionPage() {
         setLoading(false);
       }
     };
+    
+    // Fetch immediately on load
     fetchParcels();
+    
+    // 🔥 FIX: Poll every 3 seconds so tokens disappear instantly for other customers
+    const interval = setInterval(fetchParcels, 3000);
+    return () => clearInterval(interval);
   }, [apiUrl]);
 
   const selectToken = (tokenNumber: number) => {
@@ -49,11 +55,11 @@ export default function ParcelSelectionPage() {
       {loading ? (
         <Loader2 className="animate-spin text-orange-500 mt-10" size={40} />
       ) : availableTokens.length === 0 ? (
-        <div className="bg-red-50 text-red-600 p-6 rounded-3xl font-bold text-center border border-red-100 shadow-sm w-full max-w-sm">
+        <div className="bg-red-50 text-red-600 p-6 rounded-3xl font-bold text-center border border-red-100 shadow-sm w-full max-w-sm animate-in fade-in">
           All parcel tokens are currently busy. Please wait a moment and refresh.
         </div>
       ) : (
-        <div className="grid grid-cols-3 gap-4 w-full max-w-md">
+        <div className="grid grid-cols-3 gap-4 w-full max-w-md animate-in fade-in">
           {availableTokens.map((token) => (
             <button
               key={token}
