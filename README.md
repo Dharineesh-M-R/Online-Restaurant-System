@@ -1,153 +1,405 @@
-# Online Restaurant System
-🍽️ Smart Restaurant Management System (SRMS)
-A comprehensive, real-time, full-stack Online Restaurant Management System designed to handle Dine-in, Takeaway (Parcel), Kitchen Display Systems (KDS), Waiter Routing, and Cashier POS operations seamlessly.
+# 🍽️ Smart Restaurant Management System (SRMS)
 
-Built with Next.js, Express.js, and Supabase (PostgreSQL), this system ensures perfectly synchronized communication between customers and staff, minimizing wait times and eliminating order errors.
+A comprehensive, real-time, full-stack **Restaurant Management System** designed to streamline restaurant operations including **Dine-in**, **Takeaway (Parcel)**, **Kitchen Display System (KDS)**, **Waiter Dashboard**, and **Cashier POS**.
 
-✨ Key Features
-📱 1. Customer Self-Service (Dine-In & Takeaway)
-QR-Code Dine-in: Customers scan a table-specific QR code to securely open a live session.
+Built with **Next.js**, **Express.js**, and **Supabase (PostgreSQL)**, the system ensures synchronized communication between customers and restaurant staff, reducing wait times and minimizing order errors.
 
-Virtual Takeaway Tokens: Walk-in customers scan a Waiting Area QR code to claim an available Parcel Token (e.g., Token 1, 2) without interfering with dine-in tables.
+---
 
-GPS Geofencing: HTML5 Geolocation ensures customers must be physically within a 100-meter radius of the restaurant to view the menu and place orders.
+## 🚀 Features
 
-Live Status Tracking: Customers see the exact state of their food in real-time (Waiting ➡️ Preparing ➡️ Ready ➡️ Served).
+### 📱 Customer Self-Service (Dine-In & Takeaway)
 
-Digital Bill Request: Customers can trigger a table-side alert for the Waiter/Cashier with their preferred payment method (Cash, Card, UPI).
+- 📷 Table-specific QR code scanning for secure dine-in sessions.
+- 🎫 Virtual takeaway token system for parcel customers.
+- 📍 GPS Geofencing (100m radius) to allow ordering only within restaurant premises.
+- 📊 Live order tracking:
+  - Waiting
+  - Preparing
+  - Ready
+  - Served
+- 💳 Digital bill request with payment options:
+  - Cash
+  - Card
+  - UPI
 
-🤵 2. Waiter Dashboard
-Live Floor Plan: A real-time, color-coded grid of all tables and takeaway tokens showing occupancy, new orders, and bill requests.
+---
 
-Order Verification: Waiters intercept "New Orders" to review, edit quantities, or delete items before sending them to the kitchen (preventing spam or mistakes).
+### 🤵 Waiter Dashboard
 
-Ghost Session Management: 1-click "Clear Empty Table" functionality to instantly wipe abandoned sessions.
+- 🪑 Live restaurant floor plan
+- 🎨 Color-coded table status
+- 📦 Parcel token monitoring
+- ✅ Verify customer orders before sending to kitchen
+- ✏️ Edit quantity or remove incorrect items
+- 🧹 One-click Ghost Session Cleanup
+- 🔔 Kitchen ready notifications
 
-Service Tasks: Dedicated alerts for when food is ready in the kitchen to be run to the tables.
+---
 
-👨‍🍳 3. Kitchen Display System (KDS)
-Chronological Ticket View: Color-coded tickets (Normal, Warning, Critical) based on time elapsed.
+### 👨‍🍳 Kitchen Display System (KDS)
 
-Station Filtering: Chefs can filter the feed to only see their specific station (e.g., Veg Starters, Breads).
+- 📑 Chronological order tickets
+- ⏱️ Time-based color indicators
+  - 🟢 Normal
+  - 🟡 Warning
+  - 🔴 Critical
+- 🍽️ Station filtering
+  - Veg Starters
+  - Main Course
+  - Breads
+  - Desserts
+- ❌ One-click "Out of Stock"
+- 📦 Dedicated Parcel Order UI
 
-Inventory Control: 1-click "Out of Stock" button that instantly deletes the item from the queue and alerts the waiter.
+---
 
-Takeaway UI: Clear visual distinction (Purple badging & icons) for Parcel orders so expo chefs know to pack them in bags instead of plates.
+### 💻 Cashier & Billing POS
 
-💻 4. Cashier & Billing POS
-Dynamic Cart Subtotaling: Real-time calculation of Grand Totals including dynamic 5% GST and Platform Fees based on surviving items.
+- 🧾 Dynamic subtotal calculation
+- 💰 Automatic GST (5%)
+- ➕ Platform fee calculation
+- ✏️ Edit quantities
+- 🗑️ Delete items
+- 🎁 Apply discounts
+  - Flat ₹ Discount
+  - Percentage Discount
+- 💳 Payment recording
+- 🔄 Automatic table/token release after payment
 
-Live Editing & Discounts: Cashiers can delete items, modify quantities, and apply percentage (%) or flat (₹) discounts directly at checkout.
+---
 
-Payment Finalization: Logs the exact payment method to the database and instantly frees the table/token for the next customer.
+# 🏗️ System Modules
 
-🛠️ Tech Stack
-Frontend:
+- Customer Ordering Portal
+- QR Code Table Management
+- Parcel Token Management
+- Waiter Dashboard
+- Kitchen Display System
+- Billing & POS
+- Inventory Status
+- Payment Management
 
-Framework: React 18 / Next.js 14+ (App Router)
+---
 
-Styling: Tailwind CSS
+# 🛠️ Tech Stack
 
-Icons: Lucide React
+## Frontend
 
-State Management: React Context API
+- Next.js (App Router)
+- React 18
+- Tailwind CSS
+- Lucide React
+- React Context API
 
-Backend:
+## Backend
 
-Runtime: Node.js (v18+)
+- Node.js
+- Express.js
+- REST APIs
 
-Framework: Express.js
+## Database
 
-Database: PostgreSQL (Hosted on Supabase)
+- PostgreSQL
+- Supabase
 
-Communication: RESTful APIs with aggressive 3-second polling for real-time synchronization.
+## Communication
 
-⚙️ Prerequisites
-Before you begin, ensure you have the following installed:
+- REST APIs
+- 3-second polling for real-time synchronization
 
-Node.js (v18.0.0 or higher)
+---
 
-Git
+# 📂 Project Structure
 
-A free Supabase account.
+```
+restaurant-management-system/
+│
+├── frontend/
+│   ├── src/
+│   ├── public/
+│   └── package.json
+│
+├── backend/
+│   ├── routes/
+│   ├── controllers/
+│   ├── middleware/
+│   ├── server.js
+│   └── package.json
+│
+├── db/
+│   ├── schema.sql
+│   └── seed.sql
+│
+├── screenshots/
+│
+├── README.md
+└── LICENSE
+```
 
-🚀 Installation & Setup
-1. Clone the Repository
-Bash
+---
+
+# ⚙️ Prerequisites
+
+Before starting, install:
+
+- Node.js (v18 or later)
+- Git
+- Supabase Account
+
+---
+
+# 🚀 Installation
+
+## 1️⃣ Clone Repository
+
+```bash
 git clone https://github.com/your-username/restaurant-management-system.git
+
 cd restaurant-management-system
-2. Database Setup (Supabase)
-Create a new project in Supabase.
+```
 
-Open the SQL Editor and execute the schema scripts (found in /db/schema.sql). Ensure the following tables are created:
+---
 
-categories, menu_items, tables, table_sessions, orders, order_serves, order_items, payments, staff.
+## 2️⃣ Database Setup
 
-Run the following command to insert the "Virtual Parcel Tables" for the Takeaway system:
+Create a new Supabase project.
 
-SQL
-INSERT INTO public.tables (table_number, qr_code, status) VALUES 
-(101, 'parcel_101', 'available'), (102, 'parcel_102', 'available'),
-(103, 'parcel_103', 'available'), (104, 'parcel_104', 'available');
-3. Backend Setup
-Bash
+Run:
+
+```
+db/schema.sql
+```
+
+Create the following tables:
+
+- categories
+- menu_items
+- tables
+- table_sessions
+- orders
+- order_serves
+- order_items
+- payments
+- staff
+
+Insert parcel tables:
+
+```sql
+INSERT INTO public.tables (table_number, qr_code, status)
+VALUES
+(101,'parcel_101','available'),
+(102,'parcel_102','available'),
+(103,'parcel_103','available'),
+(104,'parcel_104','available');
+```
+
+---
+
+## 3️⃣ Backend Setup
+
+```bash
 cd backend
-npm install
-Create a .env file in the backend directory:
 
-Code snippet
+npm install
+```
+
+Create **.env**
+
+```env
 PORT=5000
+
 SUPABASE_URL=your_supabase_project_url
-SUPABASE_KEY=your_supabase_anon_public_key
-Start the server:
 
-Bash
-node server.js 
-# Or use nodemon: npm run dev
-4. Frontend Setup
-Bash
-cd frontend
-npm install
-Create a .env.local file in the frontend directory:
+SUPABASE_KEY=your_supabase_anon_key
+```
 
-Code snippet
-NEXT_PUBLIC_API_URL=http://localhost:5000
-# Coordinates for GPS Geofencing (Set to your testing location)
-NEXT_PUBLIC_LATITUDE=11.4962
-NEXT_PUBLIC_LONGITUDE=77.9972
-Start the development server:
+Start server
 
-Bash
+```bash
 npm run dev
-🧪 Testing the Workflows
-To effectively test the system locally without cache collisions, it is recommended to open the Customer View in a standard browser tab, and the Staff Dashboards in an Incognito/Private window.
+```
 
-Takeaway (Parcel) Flow:
+or
 
-Navigate to http://localhost:3000/customer/parcel
+```bash
+node server.js
+```
 
-Select an available token.
+---
 
-Observe how the token is instantly locked for other users.
+## 4️⃣ Frontend Setup
 
-Place an order and try to access the cart again (you will be blocked, as takeaway is single-serve).
+```bash
+cd frontend
 
-Open the Waiter Dashboard (/waiter) to verify the purple Parcel order.
+npm install
+```
 
-Send it to the Kitchen (/kitchen), cook it, and serve it.
+Create **.env.local**
 
-Request the bill and finalize it in the Cashier Dashboard (/billing).
+```env
+NEXT_PUBLIC_API_URL=http://localhost:5000
 
-Notice the Token is instantly released back to the Parcel Landing Page!
+NEXT_PUBLIC_LATITUDE=11.4962
 
-💡 Developer Tip (Bypassing GPS): > If you are testing off-site, you can bypass the GPS lock by adding setIsLocationValid(true); return; at the very top of the geolocation useEffect block in frontend/src/app/component/cartContext.tsx.
+NEXT_PUBLIC_LONGITUDE=77.9972
+```
 
-🗺️ System Architecture Overview
-/sessions (API): Manages the core lifecycle of a table. Ensures ghost sessions are dropped and multiple devices at the same table share the exact same cart state.
+Run
 
-Context API (Frontend): Wraps all /customer routes. Serves as a strict gatekeeper, verifying table numbers and GPS coordinates before granting menu access.
+```bash
+npm run dev
+```
 
-Database Normalization: Orders are split into orders (the Master Bill), order_serves (Batch 1, Batch 2), and order_items (Individual food statuses) to allow hyper-granular kitchen tracking without locking the entire bill.
+---
 
-📝 License
-This project is licensed under the MIT License - see the LICENSE file for details.
+# 🧪 Testing Workflow
+
+## Takeaway Flow
+
+Visit
+
+```
+http://localhost:3000/customer/parcel
+```
+
+1. Select an available token
+2. Place order
+3. Open Waiter Dashboard
+4. Send to Kitchen
+5. Cook & Serve
+6. Generate Bill
+7. Complete Payment
+8. Verify token becomes available again
+
+---
+
+# 🗺️ System Architecture
+
+## Session Management
+
+- Shared live table sessions
+- Automatic ghost session cleanup
+- Multi-device synchronization
+
+---
+
+## Customer Context API
+
+Responsible for:
+
+- GPS Validation
+- Table Verification
+- Cart Management
+- Session Synchronization
+
+---
+
+## Database Design
+
+Database is normalized into:
+
+```
+Orders
+      │
+      ├── Order Serves
+      │         │
+      │         └── Order Items
+```
+
+This enables:
+
+- Multiple food batches
+- Independent item tracking
+- Kitchen workflow optimization
+
+---
+
+# 📸 Screenshots
+
+Add screenshots inside the `screenshots` folder.
+
+Example:
+
+```
+screenshots/
+
+login.png
+
+customer-menu.png
+
+waiter-dashboard.png
+
+kitchen-display.png
+
+billing-dashboard.png
+```
+
+Then display them:
+
+```markdown
+## Customer Menu
+
+![Customer Menu](screenshots/customer-menu.png)
+
+## Waiter Dashboard
+
+![Waiter Dashboard](screenshots/waiter-dashboard.png)
+
+## Kitchen Display
+
+![Kitchen Display](screenshots/kitchen-display.png)
+
+## Billing
+
+![Billing](screenshots/billing-dashboard.png)
+```
+
+---
+
+# 💡 Developer Tip
+
+To bypass GPS during local development, temporarily modify the geolocation check:
+
+```javascript
+setIsLocationValid(true);
+return;
+```
+
+Place this at the beginning of the geolocation `useEffect` in:
+
+```
+frontend/src/app/component/cartContext.tsx
+```
+
+⚠️ Remove this before deploying to production.
+
+---
+
+# 🔮 Future Enhancements
+
+- 📱 Mobile Application
+- 🔔 Push Notifications
+- 🤖 AI-based Sales Prediction
+- 📈 Analytics Dashboard
+- 🍕 Online Delivery Integration
+- 📊 Restaurant Performance Reports
+
+---
+
+# 👨‍💻 Author
+
+**Dharineesh M R**
+
+- GitHub: https://github.com/your-username
+- LinkedIn: https://linkedin.com/in/your-profile
+- Email: your-email@example.com
+
+---
+
+# 📄 License
+
+This project is licensed under the **MIT License**.
+
+See the `LICENSE` file for more information.
