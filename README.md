@@ -392,14 +392,8 @@ frontend/src/app/component/cartContext.tsx
 
 **Dharineesh M R**
 
-- GitHub: https://github.com/your-username
-- LinkedIn: https://linkedin.com/in/your-profile
-- Email: your-email@example.com
+- GitHub: https://github.com/Dharineesh-M-R
+- LinkedIn: https://linkedin.com/in/dharineesh-m-r-4627a9343
+- Email: dharineeshmagudeswaran@gmail.com
 
----
 
-# 📄 License
-
-This project is licensed under the **MIT License**.
-
-See the `LICENSE` file for more information.
