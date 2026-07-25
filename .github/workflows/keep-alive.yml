@@ -16,6 +16,6 @@ jobs:
           SUPABASE_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         # Replace 'your_table_name' below with the actual name of your table
         run: |
-          curl "${SUPABASE_URL}/rest/v1/your_table_name?select=id&limit=1" \
+          curl "${SUPABASE_URL}/rest/v1/keepalive?select=id&limit=1" \
           -H "apikey: ${SUPABASE_KEY}" \
           -H "Authorization: Bearer ${SUPABASE_KEY}"
