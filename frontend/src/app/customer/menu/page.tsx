@@ -13,7 +13,8 @@ import {
   BellRing,
 } from "lucide-react";
 import Link from "next/link";
-import { useCart, Dish } from "../component/cartContext";
+import { useCart } from "@/context/CartContext";
+import { Dish } from "@/types/cart";
 
 export default function MenuPage() {
   const { cart, addToCart, updateQuantity, cartCount, isLoaded, tableNumber } =

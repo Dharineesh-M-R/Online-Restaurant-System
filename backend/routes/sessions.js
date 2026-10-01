@@ -14,7 +14,9 @@ router.get("/", async (req, res) => {
       .select("session_id, cart_items")
       .eq("table_number", table)
       .neq("status", "completed") 
-      .neq("status", "cancelled") // 🔥 FIX: Ignore cancelled sessions!
+      .neq("status", "cancelled") 
+      .order("created_at", { ascending: false }) // 🔥 FIX 1: Sort by newest first
+      .limit(1)                                  // 🔥 FIX 2: Force only 1 row to fix PGRST116
       .maybeSingle(); 
 
     if (fetchError) throw fetchError;

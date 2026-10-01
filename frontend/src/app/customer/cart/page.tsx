@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import {
   Trash2, Plus, Minus, ArrowLeft, Utensils, MessageSquareText, Phone, CheckCircle2, Check
 } from "lucide-react";
-import { useCart } from "../component/cartContext";
+import { useCart } from "@/context/CartContext";
 
 export default function CartPage() {
   const router = useRouter();

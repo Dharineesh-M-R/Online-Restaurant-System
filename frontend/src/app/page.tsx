@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { useCart } from "./customer/component/cartContext"; 
+// NEW
+import { useCart } from "@/context/CartContext";
 
 export default function HomePage() {
   const { tableNumber } = useCart();

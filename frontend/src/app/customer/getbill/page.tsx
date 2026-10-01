@@ -6,7 +6,7 @@ import {
   ArrowLeft, Receipt, CheckCircle2, UtensilsCrossed, 
   IndianRupee, CreditCard, Smartphone, Wallet, Clock, ShoppingBag
 } from "lucide-react";
-import { useCart } from "../component/cartContext";
+import { useCart } from "@/context/CartContext";
 
 export default function BillPage() {
   const { placedServes, isLoaded, tableNumber, sessionId, sessionStatus } = useCart();
