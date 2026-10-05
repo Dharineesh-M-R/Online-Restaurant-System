@@ -9,6 +9,7 @@ import billingRoutes from "./routes/billing.js"; // <-- Add this import
 import kitchenRoutes from "./routes/kitchen.js"; // <-- Add this import
 import waiterRoutes from "./routes/waiter.js";
 import authRoutes from "./routes/auth.js";
+import managementRoutes from "./routes/management.js";
 dotenv.config();
 
 const app = express();
@@ -29,6 +30,7 @@ app.use("/admin/billing", billingRoutes); // <-- Mount the new route
 app.use("/admin/kitchen", kitchenRoutes);
 app.use("/admin/waiter", waiterRoutes);
 app.use("/admin/auth",authRoutes);
+app.use("/management", managementRoutes);
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
