@@ -33,6 +33,7 @@ export interface CartContextType {
   cart: CartItem[];
   sessionId: string | null;
   tableNumber: string | null;
+  tabName?: string;
   addToCart: (dish: Dish) => void;
   updateQuantity: (id: number, delta: number) => void;
   updateNotes: (id: number, text: string) => void;

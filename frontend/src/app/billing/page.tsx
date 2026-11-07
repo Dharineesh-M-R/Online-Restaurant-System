@@ -36,6 +36,8 @@ interface OrderItem {
 interface TableData {
   id: string;
   tableNumber: number;
+  tabName?: string;
+  isSubTab?: boolean;
   status: "Available" | "Occupied" | "Billed";
   paymentMethod?: "cash" | "card" | "upi" | null;
   sessionId: string | null;
@@ -161,6 +163,8 @@ export default function BillingDashboard() {
           tableNumber: selectedTable.tableNumber,
           paymentMethod: paymentMethod,
           finalAmount: grandTotal,
+          originalAmount: Math.round(grandTotal + discountAmount),
+          discountAmount: Math.round(discountAmount),
         }),
       });
 
@@ -406,11 +410,16 @@ export default function BillingDashboard() {
 
                 <div className="my-auto">
                   <span className="text-[10px] font-black uppercase tracking-widest text-stone-400 block mb-0.5">
-                    {isParcel ? "Parcel Token" : "Table"}
+                    {isParcel ? "Parcel Token" : table.tabName && table.tabName !== "Main" ? "Shared Party" : "Table"}
                   </span>
                   <h2 className="text-3xl sm:text-4xl font-black text-stone-900 leading-none">
                     {isParcel ? table.tableNumber - 100 : table.tableNumber}
                   </h2>
+                  {table.tabName && table.tabName !== "Main" && (
+                    <span className="inline-block mt-1 text-[10px] font-black uppercase text-purple-700 bg-purple-100 border border-purple-200 px-2 py-0.5 rounded-md truncate max-w-[130px]">
+                      👥 {table.tabName}
+                    </span>
+                  )}
                   {table.waiterName && (
                     <span className="inline-block mt-1.5 text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200/80 px-2 py-0.5 rounded-md truncate max-w-[120px]">
                       🤵 {table.waiterName}
@@ -453,7 +462,7 @@ export default function BillingDashboard() {
                 <h3 className="text-xl font-black text-stone-900 leading-tight">
                   {selectedTable.tableNumber > 100
                     ? `Parcel Token #${selectedTable.tableNumber - 100}`
-                    : `Table #${selectedTable.tableNumber} Settlement`}
+                    : `Table #${selectedTable.tableNumber}${selectedTable.tabName && selectedTable.tabName !== "Main" ? ` (${selectedTable.tabName})` : ''} Settlement`}
                 </h3>
                 <div className="flex flex-wrap items-center gap-2 mt-1">
                   <p className="text-[10px] font-black uppercase tracking-widest text-stone-400">

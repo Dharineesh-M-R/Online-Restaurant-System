@@ -29,8 +29,10 @@ router.get("/orders", async (req, res) => {
           created_at,
           orders (
             waiter_id,
+            session_id,
             staff:waiter_id ( id, name, employee_id ),
-            tables ( table_number )
+            tables ( table_number ),
+            table_sessions:session_id ( tab_name )
           )
         )
       `)
@@ -73,12 +75,21 @@ router.get("/orders", async (req, res) => {
     (orderItems || []).forEach((item) => {
       if (!item.order_serves || !item.order_serves.orders || !item.order_serves.orders.tables) return;
 
+      // Filter out items marked out of stock so they don't remain on the kitchen KDS screen
+      const isOos = item.status === "out_of_stock" || (item.notes && item.notes.includes("[OUT OF STOCK"));
+      if (isOos) return;
+
       const serveId = item.order_serves.id;
 
       if (!ticketsMap[serveId]) {
+        const sessionInfo = item.order_serves.orders.table_sessions;
+        const rawTabName = Array.isArray(sessionInfo) ? sessionInfo[0]?.tab_name : sessionInfo?.tab_name;
+        const tabName = (rawTabName && rawTabName !== "Main") ? rawTabName : null;
+
         ticketsMap[serveId] = {
           serveId: serveId,
           tableNumber: item.order_serves.orders.tables.table_number,
+          tabName: tabName,
           serveNumber: item.order_serves.serve_number,
           orderTime: item.order_serves.created_at,
           waiterName: item.order_serves.orders.staff?.name || null,
@@ -161,7 +172,7 @@ router.patch("/update-item", async (req, res) => {
         await supabase
           .from("menu_items")
           .update({ is_available: false })
-          .eq("name", finalDishName);
+          .ilike("name", finalDishName.trim());
       }
 
       // 3. Update order_items status to 'out_of_stock'

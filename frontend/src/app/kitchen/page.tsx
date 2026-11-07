@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useRef } from "react";
 import {
+  Bell,
+  BellOff,
   ChefHat,
   Clock,
   Flame,
@@ -11,8 +13,6 @@ import {
   List,
   Grip,
   AlertTriangle,
-  Volume2,
-  VolumeX,
   LogOut,
   ShoppingBag,
   Sparkles,
@@ -39,6 +39,7 @@ interface KitchenItem {
 interface KitchenTicket {
   serveId: string;
   tableNumber: number;
+  tabName?: string | null;
   serveNumber: number;
   orderTime: string;
   waiterName?: string | null;
@@ -52,7 +53,7 @@ export default function KitchenDashboard() {
   const [activeStation, setActiveStation] = useState<string>("All");
   const [viewMode, setViewMode] = useState<"tickets" | "allday">("tickets");
   const [currentTime, setCurrentTime] = useState(new Date());
-  const [isAudioEnabled, setIsAudioEnabled] = useState(true);
+  const [isMuted, setIsMuted] = useState(true);
 
   // Current chef credentials
   const [currentChef, setCurrentChef] = useState<{ id: string; name: string; employeeId: string } | null>(null);
@@ -65,6 +66,7 @@ export default function KitchenDashboard() {
   const [notificationToast, setNotificationToast] = useState<string | null>(null);
 
   const prevTicketCount = useRef(0);
+  const isFirstLoad = useRef(true);
 
   const stations = [
     "All",
@@ -99,18 +101,13 @@ export default function KitchenDashboard() {
     }
   }, [router]);
 
-  // Fetch Orders & Audio Ping
+  // Fetch Orders
   const fetchKitchenOrders = async () => {
     try {
       const res = await fetch(`${apiUrl}/admin/kitchen/orders`);
       if (res.ok) {
         const data = await res.json();
         setTickets(data.tickets);
-
-        if (data.tickets.length > prevTicketCount.current && isAudioEnabled) {
-          playAudioAlert();
-        }
-        prevTicketCount.current = data.tickets.length;
       }
     } catch (err) {
       console.error("Failed to fetch kitchen orders", err);
@@ -123,20 +120,33 @@ export default function KitchenDashboard() {
     fetchKitchenOrders();
     const interval = setInterval(fetchKitchenOrders, 3000);
     return () => clearInterval(interval);
-  }, [isAudioEnabled]);
+  }, [apiUrl]);
 
-  // Live Timer Ticker
+  // Audio Notification Trigger (When waiter confirms and sends dishes to kitchen)
   useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
+    // Count how many total items are currently pending across all tickets
+    let currentPendingItems = 0;
+    tickets.forEach((ticket) => {
+      currentPendingItems += ticket.items.filter((i) => i.status === "pending").length;
+    });
 
-  const playAudioAlert = () => {
-    try {
+    // Skip first load to prevent false ding on dashboard open
+    if (isFirstLoad.current) {
+      if (tickets.length > 0) {
+        prevTicketCount.current = currentPendingItems;
+        isFirstLoad.current = false;
+      }
+      return;
+    }
+
+    // Trigger: Waiter confirmed new dishes sent to kitchen
+    if (currentPendingItems > prevTicketCount.current && !isMuted) {
       const audio = new Audio("/ding.mp3");
-      audio.play().catch(() => {});
-    } catch (e) {}
-  };
+      audio.play().catch((err) => console.log("Audio blocked by browser", err));
+    }
+
+    prevTicketCount.current = currentPendingItems;
+  }, [tickets, isMuted]);
 
   // Status updates with Chef tracking
   const advanceStatus = async (itemId: string, currentStatus: string) => {
@@ -450,15 +460,16 @@ export default function KitchenDashboard() {
 
             {/* Audio Toggle */}
             <button
-              onClick={() => setIsAudioEnabled(!isAudioEnabled)}
-              className={`p-2 rounded-xl border transition cursor-pointer ${
-                isAudioEnabled
-                  ? "bg-zinc-900 border-zinc-800 text-zinc-300 hover:text-white"
-                  : "bg-rose-950/40 border-rose-900 text-rose-400"
+              onClick={() => setIsMuted(!isMuted)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold text-xs transition-all cursor-pointer border ${
+                isMuted
+                  ? "bg-zinc-900 border-zinc-800 text-zinc-500 hover:text-zinc-300"
+                  : "bg-emerald-950/60 border-emerald-800 text-emerald-400 shadow-2xs"
               }`}
-              title={isAudioEnabled ? "Sound Enabled" : "Sound Muted"}
+              title={isMuted ? "Sound Off (Click to enable alerts)" : "Sound On (Click to mute)"}
             >
-              {isAudioEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
+              {isMuted ? <BellOff size={15} /> : <Bell size={15} className="animate-bounce" />}
+              <span>{isMuted ? "Sound Off" : "Sound On"}</span>
             </button>
 
             {/* Logout */}
@@ -504,9 +515,16 @@ export default function KitchenDashboard() {
                         {isParcel ? <ShoppingBag size={20} /> : ticket.tableNumber}
                       </div>
                       <div>
-                        <h2 className="text-lg font-black text-white leading-tight">
-                          {isParcel ? `Parcel #${ticket.tableNumber - 100}` : `Table #${ticket.tableNumber}`}
-                        </h2>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <h2 className="text-lg font-black text-white leading-tight">
+                            {isParcel ? `Parcel #${ticket.tableNumber - 100}` : `Table #${ticket.tableNumber}`}
+                          </h2>
+                          {ticket.tabName && (
+                            <span className="text-[10px] font-black uppercase text-amber-300 bg-amber-950/80 border border-amber-700/80 px-2 py-0.5 rounded-md">
+                              👥 {ticket.tabName}
+                            </span>
+                          )}
+                        </div>
                         <div className="flex items-center gap-1.5 mt-0.5">
                           <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
                             Round #{ticket.serveNumber}

@@ -19,6 +19,8 @@ interface PastOrder {
   id: string;
   tableNumber: number;
   totalAmount: number;
+  originalAmount: number;
+  discountAmount: number;
   paymentMethod: "cash" | "card" | "upi" | "pending";
   paymentStatus: "paid" | "pending" | "failed";
   createdAt: string;
@@ -34,6 +36,14 @@ export default function BillingHistory() {
   const [searchQuery, setSearchQuery] = useState("");
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+
+  // Force JS to parse the database string as UTC 
+  // so it correctly converts it to local Indian Standard Time (IST)
+  const parseDatabaseDate = (dateString: string) => {
+    if (!dateString) return new Date();
+    const safeString = dateString.replace(" ", "T") + (dateString.includes("Z") ? "" : "Z");
+    return new Date(safeString);
+  };
 
   useEffect(() => {
     const fetchBillingHistory = async () => {
@@ -58,7 +68,7 @@ export default function BillingHistory() {
     if (dateFilter === "all") return true;
 
     const today = new Date();
-    const orderDate = new Date(order.createdAt);
+    const orderDate = parseDatabaseDate(order.createdAt);
     const diffDays = Math.floor(
       (today.getTime() - orderDate.getTime()) / (1000 * 3600 * 24)
     );
@@ -76,16 +86,18 @@ export default function BillingHistory() {
 
   const handleExport = () => {
     if (displayOrders.length === 0) return alert("No data available to export!");
-    const headers = ["Order ID", "Date & Time", "Table", "Assigned Waiter", "Chef(s)", "Amount", "Method", "Status"];
+    const headers = ["Order ID", "Date & Time", "Table", "Assigned Waiter", "Chef(s)", "Original Amount", "Discount", "Paid Amount", "Method", "Status"];
     const csvRows = [
       headers.join(","),
       ...displayOrders.map((o) =>
         [
           o.id,
-          `"${new Date(o.createdAt).toLocaleString()}"`,
+          `"${parseDatabaseDate(o.createdAt).toLocaleString()}"`,
           o.tableNumber,
           `"${o.waiterName || "Unassigned"}"`,
           `"${(o.chefs || []).join("; ") || "N/A"}"`,
+          o.originalAmount || o.totalAmount,
+          o.discountAmount || 0,
           o.totalAmount,
           o.paymentMethod,
           o.paymentStatus,
@@ -232,7 +244,7 @@ export default function BillingHistory() {
                     {order.id}
                   </td>
                   <td className="py-4 px-5 text-stone-500 font-medium">
-                    {new Date(order.createdAt).toLocaleString([], {
+                    {parseDatabaseDate(order.createdAt).toLocaleString([], {
                       month: "short",
                       day: "numeric",
                       hour: "2-digit",
@@ -271,8 +283,20 @@ export default function BillingHistory() {
                       <span className="text-[11px] text-stone-400 font-medium">-</span>
                     )}
                   </td>
-                  <td className="py-4 px-5 font-black text-stone-900 text-sm">
-                    ₹{order.totalAmount}
+                  <td className="py-4 px-5">
+                    <div className="flex flex-col justify-center">
+                      <span className="font-black text-stone-900 text-sm">₹{order.totalAmount}</span>
+                      {order.discountAmount > 0 && (
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <span className="text-[11px] font-bold text-stone-400 line-through">
+                            ₹{order.originalAmount}
+                          </span>
+                          <span className="text-[9px] font-black text-orange-600 bg-orange-100 px-1.5 py-0.5 rounded border border-orange-200 uppercase tracking-widest">
+                            -₹{order.discountAmount} Offer
+                          </span>
+                        </div>
+                      )}
+                    </div>
                   </td>
                   <td className="py-4 px-5">
                     <div className="flex items-center gap-1.5 font-bold uppercase text-[11px] text-stone-700">

@@ -94,6 +94,17 @@ export default function MenuPage() {
     return () => clearInterval(interval);
   }, []);
 
+  // Sync category from URL parameter (e.g. ?category=Desserts for upsells)
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const catParam = params.get("category");
+      if (catParam) {
+        setSelectedCategory(catParam);
+      }
+    }
+  }, []);
+
   const filteredDishes = dishes.filter((dish) => {
     const matchesSearch = dish.name
       .toLowerCase()

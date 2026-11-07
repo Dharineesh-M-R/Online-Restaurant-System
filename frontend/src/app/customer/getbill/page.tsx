@@ -18,6 +18,9 @@ import {
   AlertTriangle,
   X,
   AlertCircle,
+  Plus,
+  Coffee,
+  ChevronRight,
 } from "lucide-react";
 import { useCart } from "@/context/CartContext";
 
@@ -274,47 +277,110 @@ export default function BillPage() {
 
             </div>
 
+            {/* Concept 1: The "Sweet Tooth" Upsell Banner (Revenue Driver) */}
+            {!isServerBilled && (
+              <div className="bg-gradient-to-br from-amber-50 via-orange-50/70 to-rose-50 border border-amber-200/90 rounded-3xl p-5 shadow-2xs relative overflow-hidden">
+                <div className="flex items-start gap-3.5">
+                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 text-white flex items-center justify-center shrink-0 shadow-md shadow-orange-500/20 text-2xl">
+                    🍨
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] font-black uppercase tracking-widest text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full">
+                        Craving a Sweet Finish?
+                      </span>
+                      <Sparkles size={13} className="text-amber-500" />
+                    </div>
+                    <h4 className="text-sm font-black text-stone-900 leading-tight mt-1.5">
+                      Still got room for dessert or coffee?
+                    </h4>
+                    <p className="text-xs text-stone-600 mt-1 leading-relaxed">
+                      Treat yourself to an ice cream, hot beverage, or an extra snack before closing the table tab.
+                    </p>
+
+                    {/* Quick Category Action Chips */}
+                    <div className="flex flex-wrap items-center gap-2 mt-3 pt-1">
+                      <Link
+                        href={`/customer/menu?table=${tableNumber}&category=Desserts`}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 bg-white hover:bg-amber-100 border border-amber-200 text-stone-800 rounded-xl text-xs font-bold transition shadow-2xs active:scale-95"
+                      >
+                        <span>🍨 Desserts</span>
+                        <ChevronRight size={12} className="text-stone-400" />
+                      </Link>
+                      <Link
+                        href={`/customer/menu?table=${tableNumber}`}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 bg-white hover:bg-orange-100 border border-orange-200 text-stone-800 rounded-xl text-xs font-bold transition shadow-2xs active:scale-95"
+                      >
+                        <span>☕ Hot Coffee & Drinks</span>
+                        <ChevronRight size={12} className="text-stone-400" />
+                      </Link>
+                      <Link
+                        href={`/customer/menu?table=${tableNumber}`}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 bg-white hover:bg-stone-100 border border-stone-200 text-stone-800 rounded-xl text-xs font-bold transition shadow-2xs active:scale-95"
+                      >
+                        <span>🥘 Extra Starters</span>
+                        <ChevronRight size={12} className="text-stone-400" />
+                      </Link>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
           </div>
         )}
       </main>
 
-      {/* Sticky Bottom Action */}
+      {/* Sticky Bottom Action (Concept 2: Dual Action Re-order + Request Bill) */}
       {placedServes.length > 0 && !isServerBilled && (
         <div className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md p-4 border-t border-stone-200/80 shadow-lg z-30">
           <div className="max-w-lg mx-auto">
             {!allReadyOrServed && (
               <p className="text-[10px] text-center text-amber-700 font-black uppercase mb-2 tracking-widest flex items-center justify-center gap-1">
                 <Clock size={12} />
-                <span>Bill request unlocks once all items are ready/served</span>
+                <span>Bill request unlocks once all items are served</span>
               </p>
             )}
 
-            <button
-              onClick={() => allReadyOrServed && setShowPaymentModal(true)}
-              disabled={isRequestingLocal || !allReadyOrServed}
-              className={`w-full py-4 rounded-2xl font-black text-sm tracking-wide shadow-md transition-all flex items-center justify-center gap-2 active:scale-98 cursor-pointer ${
-                !allReadyOrServed
-                  ? "bg-stone-200 text-stone-400 cursor-not-allowed shadow-none"
-                  : "bg-orange-600 hover:bg-orange-700 text-white shadow-orange-600/25"
-              }`}
-            >
-              {isRequestingLocal ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  <span>Notifying Billing Desk...</span>
-                </>
-              ) : !allReadyOrServed ? (
-                <>
-                  <Clock size={16} />
-                  <span>Cooking in Progress...</span>
-                </>
-              ) : (
-                <>
-                  <Receipt size={16} />
-                  <span>Request Bill & Payment</span>
-                </>
-              )}
-            </button>
+            <div className="flex items-center gap-2.5">
+              {/* Secondary CTA: Order Something Else */}
+              <Link
+                href={`/customer/menu?table=${tableNumber}`}
+                className="py-3.5 px-4 rounded-2xl font-black text-xs text-stone-800 bg-stone-100 hover:bg-stone-200 active:scale-98 transition flex items-center justify-center gap-1.5 border border-stone-200 shadow-2xs shrink-0 cursor-pointer"
+                title="Return to the menu to order more items"
+              >
+                <Plus size={15} className="text-orange-600 stroke-[3]" />
+                <span>Order More</span>
+              </Link>
+
+              {/* Primary CTA: Request Bill & Payment */}
+              <button
+                onClick={() => allReadyOrServed && setShowPaymentModal(true)}
+                disabled={isRequestingLocal || !allReadyOrServed}
+                className={`flex-1 py-3.5 px-4 rounded-2xl font-black text-xs tracking-wide shadow-md transition-all flex items-center justify-center gap-2 active:scale-98 cursor-pointer ${
+                  !allReadyOrServed
+                    ? "bg-stone-200 text-stone-400 cursor-not-allowed shadow-none"
+                    : "bg-orange-600 hover:bg-orange-700 text-white shadow-orange-600/25"
+                }`}
+              >
+                {isRequestingLocal ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Notifying Desk...</span>
+                  </>
+                ) : !allReadyOrServed ? (
+                  <>
+                    <Clock size={15} />
+                    <span>Cooking in Progress</span>
+                  </>
+                ) : (
+                  <>
+                    <Receipt size={15} />
+                    <span>Request Bill & Pay</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

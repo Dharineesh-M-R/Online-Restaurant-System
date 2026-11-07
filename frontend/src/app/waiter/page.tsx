@@ -1,7 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
+  Bell,
+  BellOff,
   BellRing,
   LayoutGrid,
   CheckCircle2,
@@ -25,7 +27,12 @@ import {
   AlertTriangle,
   UserPlus,
   User,
+  Users,
+  QrCode,
+  Copy,
+  Check,
   Sparkles,
+  Lock,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -37,11 +44,15 @@ interface ReadyItem {
   serveNumber: number;
   chefName?: string | null;
   chefEmployeeId?: string | null;
+  isParcel?: boolean;
+  paymentStatus?: "paid" | "pending" | "failed" | string;
 }
 
 interface TableStatus {
   number: number;
   isOccupied: boolean;
+  sharedPartiesCount?: number;
+  activeTabs?: { sessionId: string; tabName: string; status: string }[];
   needsHelp: boolean;
   hasUnconfirmed: boolean;
   hasOutOfStock?: boolean;
@@ -64,6 +75,13 @@ interface OrderSummaryItem {
   notes?: string;
 }
 
+interface TabInfo {
+  sessionId: string;
+  tabName: string;
+  status: string;
+  assignedWaiter?: { id: string; name: string; employeeId: string } | null;
+}
+
 export default function WaiterDashboard() {
   const [activeTab, setActiveTab] = useState<"tasks" | "tables">("tasks");
   const [readyItems, setReadyItems] = useState<ReadyItem[]>([]);
@@ -73,14 +91,40 @@ export default function WaiterDashboard() {
   const [selectedTable, setSelectedTable] = useState<number | null>(null);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [activeSessionStatus, setActiveSessionStatus] = useState<string | null>(null);
+  const [activeTabName, setActiveTabName] = useState<string>("Main");
+  const [availableTabs, setAvailableTabs] = useState<TabInfo[]>([]);
   const [selectedTableWaiter, setSelectedTableWaiter] = useState<{ id: string; name: string; employeeId: string } | null>(null);
   const [tableOrders, setTableOrders] = useState<OrderSummaryItem[]>([]);
   const [isModalLoading, setIsModalLoading] = useState(false);
+
+  // Sub-Tab Creation State
+  const [isAddPartyModalOpen, setIsAddPartyModalOpen] = useState(false);
+  const [newPartyName, setNewPartyName] = useState("");
+  const [isCreatingParty, setIsCreatingParty] = useState(false);
+
+  // Method B: Dynamic Guest QR State
+  const [showQrModal, setShowQrModal] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
+
+  // Method A: Waiter Mini-POS State
+  const [showMiniPosModal, setShowMiniPosModal] = useState(false);
+  const [menuItems, setMenuItems] = useState<{ id: number; name: string; price: number; category: string }[]>([]);
+  const [miniPosCart, setMiniPosCart] = useState<{ menuItemId: number; name: string; price: number; quantity: number }[]>([]);
+  const [posCategoryFilter, setPosCategoryFilter] = useState("All");
+  const [posSearch, setPosSearch] = useState("");
+  const [isSubmittingPosOrder, setIsSubmittingPosOrder] = useState(false);
 
   const [showPaymentModal, setShowPaymentModal] = useState(false);
 
   // Current waiter credentials
   const [currentStaff, setCurrentStaff] = useState<{ id: string; name: string; employeeId: string } | null>(null);
+
+  // Audio Notification State & Refs (Default muted to adhere to browser autoplay policy)
+  const [isMuted, setIsMuted] = useState(true);
+  const prevUnconfirmedOrders = useRef(0);
+  const prevReadyTasks = useRef(0);
+  const prevBillRequests = useRef(0);
+  const isInitialMount = useRef(true);
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
   const router = useRouter();
@@ -125,13 +169,14 @@ export default function WaiterDashboard() {
     } catch (err) {}
   }, [apiUrl]);
 
-  const viewTableDetails = async (tableNum: number, isOccupied: boolean) => {
+  const viewTableDetails = async (tableNum: number, isOccupied: boolean, targetSessionId?: string) => {
     if (!isOccupied) return;
     setSelectedTable(tableNum);
     setIsModalLoading(true);
     try {
+      const query = targetSessionId ? `?sessionId=${targetSessionId}&t=${Date.now()}` : `?t=${Date.now()}`;
       const res = await fetch(
-        `${apiUrl}/admin/waiter/table-details/${tableNum}?t=${Date.now()}`,
+        `${apiUrl}/admin/waiter/table-details/${tableNum}${query}`,
         { cache: "no-store" }
       );
       if (res.ok) {
@@ -139,6 +184,8 @@ export default function WaiterDashboard() {
         setTableOrders(data.items);
         setActiveSessionId(data.sessionId);
         setActiveSessionStatus(data.sessionStatus);
+        setActiveTabName(data.tabName || "Main");
+        setAvailableTabs(data.availableTabs || []);
         setSelectedTableWaiter(data.assignedWaiter || null);
       }
     } catch (err) {
@@ -148,16 +195,19 @@ export default function WaiterDashboard() {
   };
 
   const pollTableDetails = useCallback(
-    async (tableNum: number) => {
+    async (tableNum: number, targetSessionId?: string | null) => {
       try {
+        const query = targetSessionId ? `?sessionId=${targetSessionId}&t=${Date.now()}` : `?t=${Date.now()}`;
         const res = await fetch(
-          `${apiUrl}/admin/waiter/table-details/${tableNum}?t=${Date.now()}`,
+          `${apiUrl}/admin/waiter/table-details/${tableNum}${query}`,
           { cache: "no-store" }
         );
         if (res.ok) {
           const data = await res.json();
           setActiveSessionId(data.sessionId);
           setActiveSessionStatus(data.sessionStatus);
+          setActiveTabName(data.tabName || "Main");
+          setAvailableTabs(data.availableTabs || []);
           setSelectedTableWaiter(data.assignedWaiter || null);
           setTableOrders((prev) =>
             data.items.map((newItem: OrderSummaryItem) => {
@@ -175,6 +225,76 @@ export default function WaiterDashboard() {
     [apiUrl]
   );
 
+  const handleCreateSubTab = async () => {
+    if (!selectedTable || isCreatingParty) return;
+    setIsCreatingParty(true);
+    try {
+      const res = await fetch(`${apiUrl}/admin/waiter/create-sub-tab`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tableNumber: selectedTable,
+          tabName: newPartyName.trim() || undefined,
+          waiterId: currentStaff?.id || null,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setNewPartyName("");
+        setIsAddPartyModalOpen(false);
+        await fetchFloorPlan();
+        await viewTableDetails(selectedTable, true, data.sessionId);
+      }
+    } catch (err) {
+      console.error("Create sub-tab error:", err);
+    } finally {
+      setIsCreatingParty(false);
+    }
+  };
+
+  const fetchMenuItems = async () => {
+    try {
+      const res = await fetch(`${apiUrl}/menu/items`);
+      if (res.ok) {
+        const data = await res.json();
+        setMenuItems(data.menuItems || []);
+      }
+    } catch (err) {}
+  };
+
+  const handlePunchMiniPosOrder = async () => {
+    if (!activeSessionId || !selectedTable || miniPosCart.length === 0 || isSubmittingPosOrder) return;
+    setIsSubmittingPosOrder(true);
+    try {
+      const res = await fetch(`${apiUrl}/admin/waiter/punch-order`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId: activeSessionId,
+          tableNumber: selectedTable,
+          waiterId: currentStaff?.id || null,
+          items: miniPosCart.map((i) => ({
+            menuItemId: i.menuItemId,
+            name: i.name,
+            price: i.price,
+            quantity: i.quantity,
+          })),
+        }),
+      });
+      if (res.ok) {
+        setShowMiniPosModal(false);
+        setMiniPosCart([]);
+        await viewTableDetails(selectedTable, true, activeSessionId);
+        await fetchFloorPlan();
+        fetchTasks();
+      }
+    } catch (err) {
+      console.error("Failed to punch order:", err);
+    } finally {
+      setIsSubmittingPosOrder(false);
+    }
+  };
+
   useEffect(() => {
     fetchTasks();
     fetchFloorPlan();
@@ -185,12 +305,54 @@ export default function WaiterDashboard() {
     return () => clearInterval(interval);
   }, [fetchTasks, fetchFloorPlan]);
 
+  // Audio Notification Triggers (New Orders, Ready Runner Tasks, Bill Requests)
+  useEffect(() => {
+    const currentUnconfirmed = floorTables.filter((t) => t.hasUnconfirmed).length;
+    const currentReady = readyItems.length;
+    const currentBills = floorTables.filter(
+      (t) => t.sessionStatus?.startsWith("billed") || t.needsHelp
+    ).length;
+
+    // Skip first load to avoid false alarm ding on page open
+    if (isInitialMount.current) {
+      if (floorTables.length > 0 || readyItems.length > 0) {
+        prevUnconfirmedOrders.current = currentUnconfirmed;
+        prevReadyTasks.current = currentReady;
+        prevBillRequests.current = currentBills;
+        isInitialMount.current = false;
+      }
+      return;
+    }
+
+    let playSound = false;
+
+    // Trigger 1: Customer placed a new order (Needs Confirmation)
+    if (currentUnconfirmed > prevUnconfirmedOrders.current) playSound = true;
+
+    // Trigger 2: Kitchen marked food as Ready (Runner Task)
+    if (currentReady > prevReadyTasks.current) playSound = true;
+
+    // Trigger 3: Customer requested the bill
+    if (currentBills > prevBillRequests.current) playSound = true;
+
+    // Play ding sound if a trigger fired and sound is unmuted
+    if (playSound && !isMuted) {
+      const audio = new Audio("/ding.mp3");
+      audio.play().catch((err) => console.log("Browser blocked audio playback", err));
+    }
+
+    // Update refs for next poll
+    prevUnconfirmedOrders.current = currentUnconfirmed;
+    prevReadyTasks.current = currentReady;
+    prevBillRequests.current = currentBills;
+  }, [floorTables, readyItems, isMuted]);
+
   useEffect(() => {
     if (selectedTable !== null) {
-      const modalInterval = setInterval(() => pollTableDetails(selectedTable), 3000);
+      const modalInterval = setInterval(() => pollTableDetails(selectedTable, activeSessionId), 3000);
       return () => clearInterval(modalInterval);
     }
-  }, [selectedTable, pollTableDetails]);
+  }, [selectedTable, activeSessionId, pollTableDetails]);
 
   const handleQuantityChange = (itemId: string, delta: number) => {
     setTableOrders((prev) =>
@@ -244,23 +406,45 @@ export default function WaiterDashboard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           tableNumber: selectedTable, 
+          sessionId: activeSessionId,
           paymentMethod: method,
           waiterId: currentStaff?.id || null
         }),
       });
-      if (res.ok) fetchFloorPlan();
-    } catch (err) {}
+      if (res.ok) {
+        const billedStatus = `billed_${method}`;
+        setActiveSessionStatus(billedStatus);
+        fetchFloorPlan();
+        if (selectedTable) {
+          pollTableDetails(selectedTable, activeSessionId);
+        }
+      } else {
+        const errorData = await res.json().catch(() => ({}));
+        alert(errorData.error || "Failed to request bill for this table");
+      }
+    } catch (err) {
+      console.error("Execute bill request error:", err);
+    }
   };
 
   const markAsServed = async (itemId: string) => {
-    setReadyItems((prev) => prev.filter((item) => item.id !== itemId));
     try {
-      await fetch(`${apiUrl}/admin/waiter/update-item`, {
+      const res = await fetch(`${apiUrl}/admin/waiter/update-item`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ itemId, status: "served" }),
       });
-    } catch (err) {}
+      if (res.ok) {
+        setReadyItems((prev) => prev.filter((item) => item.id !== itemId));
+      } else {
+        const errorData = await res.json().catch(() => ({}));
+        alert(errorData.error || "Cannot handover item. Please verify payment.");
+        fetchTasks();
+      }
+    } catch (err) {
+      console.error("Failed to update item status", err);
+      fetchTasks();
+    }
   };
 
   const attendTable = async (e: React.MouseEvent, tableNumber: number) => {
@@ -374,13 +558,29 @@ export default function WaiterDashboard() {
           </div>
         </div>
 
-        <button
-          onClick={handleLogout}
-          className="p-2 rounded-xl bg-stone-50 hover:bg-rose-50 text-stone-500 hover:text-rose-600 transition"
-          title="Sign out"
-        >
-          <LogOut size={16} />
-        </button>
+        <div className="flex items-center gap-2">
+          {/* Mute Toggle Button */}
+          <button
+            onClick={() => setIsMuted(!isMuted)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold text-xs transition-all cursor-pointer ${
+              isMuted
+                ? "bg-stone-100 text-stone-500 hover:bg-stone-200"
+                : "bg-orange-100 text-orange-700 border border-orange-200 shadow-2xs"
+            }`}
+            title={isMuted ? "Click to enable sound alerts" : "Click to mute sound alerts"}
+          >
+            {isMuted ? <BellOff size={16} /> : <Bell size={16} className="text-orange-600 animate-bounce" />}
+            <span>{isMuted ? "Alerts Muted" : "Alerts On"}</span>
+          </button>
+
+          <button
+            onClick={handleLogout}
+            className="p-2 rounded-xl bg-stone-50 hover:bg-rose-50 text-stone-500 hover:text-rose-600 transition cursor-pointer"
+            title="Sign out"
+          >
+            <LogOut size={16} />
+          </button>
+        </div>
       </header>
 
       {/* Main Content Area */}
@@ -425,9 +625,21 @@ export default function WaiterDashboard() {
                         </div>
                       </div>
 
-                      <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full flex items-center gap-1">
-                        <Clock size={11} /> Food Plated
-                      </span>
+                      {isParcel ? (
+                        items.every((i) => i.paymentStatus === "paid") ? (
+                          <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                            <CheckCircle2 size={11} /> Paid • Handover Ready
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-black uppercase tracking-wider text-rose-700 bg-rose-50 border border-rose-200 px-2.5 py-0.5 rounded-full flex items-center gap-1 animate-pulse">
+                            <Lock size={11} /> Unpaid • Hold at Counter
+                          </span>
+                        )
+                      ) : (
+                        <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                          <Clock size={11} /> Food Plated
+                        </span>
+                      )}
                     </div>
 
                     <div className="space-y-2.5">
@@ -459,17 +671,34 @@ export default function WaiterDashboard() {
                             </div>
                           </div>
 
-                          <button
-                            onClick={() => markAsServed(item.id)}
-                            className={`px-3 py-2 text-white rounded-xl text-xs font-black flex items-center gap-1.5 active:scale-95 transition shadow-xs cursor-pointer ${
-                              isParcel
-                                ? "bg-purple-600 hover:bg-purple-700"
-                                : "bg-stone-900 hover:bg-black"
-                            }`}
-                          >
-                            <CheckCircle2 size={15} />
-                            <span>Served</span>
-                          </button>
+                          {/* Digital Gatekeeper Action */}
+                          {isParcel ? (
+                            item.paymentStatus === "paid" ? (
+                              <button
+                                onClick={() => markAsServed(item.id)}
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 active:scale-95 transition shadow-sm shadow-emerald-600/20 cursor-pointer"
+                              >
+                                <CheckCircle2 size={14} />
+                                <span>Paid - Handover</span>
+                              </button>
+                            ) : (
+                              <div
+                                className="bg-rose-50 text-rose-600 border border-rose-200 px-3 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 opacity-80 cursor-not-allowed select-none shadow-2xs"
+                                title="Payment is pending at the billing counter. Cannot handover parcel."
+                              >
+                                <Lock size={13} className="text-rose-500" />
+                                <span>Unpaid - Hold</span>
+                              </div>
+                            )
+                          ) : (
+                            <button
+                              onClick={() => markAsServed(item.id)}
+                              className="bg-stone-900 hover:bg-black text-white px-3.5 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 active:scale-95 transition shadow-xs cursor-pointer"
+                            >
+                              <CheckCircle2 size={14} />
+                              <span>Serve to Table</span>
+                            </button>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -512,6 +741,17 @@ export default function WaiterDashboard() {
                       <div className="absolute -top-2 -left-2 bg-rose-600 text-white text-[8px] font-black uppercase px-2 py-0.5 rounded-full shadow-md flex items-center gap-1 animate-bounce z-10">
                         <AlertCircle size={10} />
                         <span>OOS!</span>
+                      </div>
+                    )}
+
+                    {/* Shared Parties Indicator Badge */}
+                    {Boolean(table.sharedPartiesCount && table.sharedPartiesCount > 1 && !table.hasOutOfStock) && (
+                      <div
+                        className="absolute -top-1.5 -left-1.5 bg-purple-700 text-white text-[8px] font-black uppercase px-1.5 py-0.5 rounded-full shadow-md z-10 flex items-center gap-0.5"
+                        title={`${table.sharedPartiesCount} shared parties at this table`}
+                      >
+                        <Users size={9} />
+                        <span>{table.sharedPartiesCount}P</span>
                       </div>
                     )}
 
@@ -660,6 +900,65 @@ export default function WaiterDashboard() {
               </button>
             </div>
 
+            {/* Virtual Sub-Tab Switcher & Sharing Controls */}
+            {!isSelectedTableParcel && (
+              <div className="mb-3.5 pb-2.5 border-b border-stone-100">
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+                    {availableTabs.map((tab) => {
+                      const isActive = tab.sessionId === activeSessionId;
+                      return (
+                        <button
+                          key={tab.sessionId}
+                          onClick={() => viewTableDetails(selectedTable, true, tab.sessionId)}
+                          className={`px-3 py-1 rounded-xl text-xs font-black transition whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
+                            isActive
+                              ? "bg-purple-600 text-white shadow-xs"
+                              : "bg-stone-100 text-stone-600 hover:bg-stone-200"
+                          }`}
+                        >
+                          <Users size={12} />
+                          <span>{tab.tabName}</span>
+                        </button>
+                      );
+                    })}
+                    <button
+                      onClick={() => setIsAddPartyModalOpen(true)}
+                      className="px-2.5 py-1 rounded-xl text-xs font-black bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100 transition whitespace-nowrap flex items-center gap-1 cursor-pointer"
+                      title="Add a separate shared party to this table"
+                    >
+                      <UserPlus size={12} />
+                      <span>+ Shared Party</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Sub-Tab Action Quick Bar: Method A (Mini-POS) & Method B (Guest QR) */}
+                <div className="flex items-center gap-2 pt-1">
+                  <button
+                    onClick={() => {
+                      setShowMiniPosModal(true);
+                      setMiniPosCart([]);
+                      fetchMenuItems();
+                    }}
+                    className="flex-1 py-1.5 px-3 bg-orange-50 hover:bg-orange-100 text-orange-700 border border-orange-200 rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 shadow-2xs"
+                  >
+                    <Utensils size={13} />
+                    <span>Punch Order (Mini-POS)</span>
+                  </button>
+
+                  <button
+                    onClick={() => setShowQrModal(true)}
+                    className="py-1.5 px-3 bg-stone-100 hover:bg-stone-200 text-stone-700 border border-stone-200 rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 shadow-2xs"
+                    title="Show temporary QR code for guests of this party to scan"
+                  >
+                    <QrCode size={13} />
+                    <span>Guest QR</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="max-h-[50vh] overflow-y-auto space-y-3 pr-1">
               {/* Quick Remove All Out-of-Stock Banner */}
               {!isModalLoading && tableOrders.some((i) => i.status === "out_of_stock" || i.isOutOfStock) && (
@@ -673,15 +972,19 @@ export default function WaiterDashboard() {
                   <button
                     onClick={async () => {
                       const oosItems = tableOrders.filter((i) => i.status === "out_of_stock" || i.isOutOfStock);
-                      await fetch(`${apiUrl}/admin/waiter/confirm-items`, {
-                        method: "PATCH",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                          items: oosItems.map((i) => ({ id: i.id, action: "delete" })),
-                          tableNumber: selectedTable,
-                        }),
-                      });
-                      oosItems.forEach((i) => handleDeleteItem(i.id));
+                      try {
+                        await fetch(`${apiUrl}/admin/waiter/confirm-items`, {
+                          method: "PATCH",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({
+                            items: oosItems.map((i) => ({ id: i.id, action: "delete" })),
+                            tableNumber: selectedTable,
+                          }),
+                        });
+                        const oosIds = new Set(oosItems.map((i) => i.id));
+                        setTableOrders((prev) => prev.filter((item) => !oosIds.has(item.id)));
+                        fetchFloorPlan();
+                      } catch (err) {}
                     }}
                     className="bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-black px-3 py-1.5 rounded-xl flex items-center gap-1 transition shrink-0 active:scale-95 shadow-xs cursor-pointer"
                   >
@@ -743,10 +1046,10 @@ export default function WaiterDashboard() {
 
                       <div className="flex items-center gap-2">
                         {/* Remove button for Out of Stock or Unconfirmed items */}
-                        {!isModalBilled &&
-                          (isOOS || item.status === "waiting_confirmation" || item.status === "pending") && (
-                            <button
-                              onClick={async () => {
+                        {(isOOS || (!isModalBilled && (item.status === "waiting_confirmation" || item.status === "pending"))) && (
+                          <button
+                            onClick={async () => {
+                              try {
                                 await fetch(`${apiUrl}/admin/waiter/confirm-items`, {
                                   method: "PATCH",
                                   headers: { "Content-Type": "application/json" },
@@ -755,17 +1058,19 @@ export default function WaiterDashboard() {
                                     tableNumber: selectedTable,
                                   }),
                                 });
-                                handleDeleteItem(item.id);
-                              }}
-                              className={isOOS
-                                ? "bg-rose-100 hover:bg-rose-200 text-rose-700 px-2.5 py-1.5 rounded-xl text-xs font-black flex items-center gap-1 transition active:scale-95 cursor-pointer shadow-2xs border border-rose-200"
-                                : "text-stone-300 hover:text-rose-600 p-1 transition cursor-pointer"}
-                              title={isOOS ? "Remove Out of Stock item from order" : "Delete item"}
-                            >
-                              <Trash2 size={isOOS ? 13 : 15} />
-                              {isOOS && <span>Remove</span>}
-                            </button>
-                          )}
+                                setTableOrders((prev) => prev.filter((i) => i.id !== item.id));
+                                fetchFloorPlan();
+                              } catch (err) {}
+                            }}
+                            className={isOOS
+                              ? "bg-rose-100 hover:bg-rose-200 text-rose-700 px-2.5 py-1.5 rounded-xl text-xs font-black flex items-center gap-1 transition active:scale-95 cursor-pointer shadow-2xs border border-rose-200"
+                              : "text-stone-300 hover:text-rose-600 p-1 transition cursor-pointer"}
+                            title={isOOS ? "Remove Out of Stock item from order" : "Delete item"}
+                          >
+                            <Trash2 size={isOOS ? 13 : 15} />
+                            {isOOS && <span>Remove</span>}
+                          </button>
+                        )}
 
                         {!isModalBilled && item.status === "waiting_confirmation" ? (
                           <div className="flex items-center bg-white rounded-xl border border-stone-200 p-0.5">
@@ -810,34 +1115,36 @@ export default function WaiterDashboard() {
                 </button>
               )}
 
-              {allItemsReadyOrServed && tableOrders.length > 0 && (
+              {isModalBilled ? (
                 <div className="flex gap-2">
                   <button
                     onClick={() => setSelectedTable(null)}
-                    className="w-1/3 bg-stone-100 text-stone-700 py-3 rounded-2xl font-bold text-xs"
+                    className="w-1/3 bg-stone-100 text-stone-700 py-3 rounded-2xl font-bold text-xs hover:bg-stone-200 transition"
                   >
                     Back
                   </button>
-
-                  {isModalBilled ? (
-                    <button
-                      disabled
-                      className="w-2/3 bg-emerald-100 text-emerald-800 py-3 rounded-2xl font-black text-xs flex items-center justify-center gap-1.5 cursor-not-allowed"
-                    >
-                      <CheckCircle2 size={16} />
-                      <span>{modalBilledMethod ? `Billed (${modalBilledMethod.toUpperCase()})` : "Bill Requested"}</span>
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => setShowPaymentModal(true)}
-                      className="w-2/3 bg-orange-600 hover:bg-orange-700 text-white py-3 rounded-2xl font-black text-xs shadow-md shadow-orange-600/20 flex items-center justify-center gap-1.5 cursor-pointer"
-                    >
-                      <Receipt size={16} />
-                      <span>Request Bill</span>
-                    </button>
-                  )}
+                  <div className="w-2/3 bg-emerald-100 border border-emerald-300 text-emerald-800 py-3 px-4 rounded-2xl font-black text-xs flex items-center justify-center gap-1.5 shadow-2xs">
+                    <CheckCircle2 size={16} className="text-emerald-600" />
+                    <span>{modalBilledMethod ? `Billed (${modalBilledMethod.toUpperCase()})` : "Bill Requested"}</span>
+                  </div>
                 </div>
-              )}
+              ) : tableOrders.length > 0 && !hasItemsToConfirm ? (
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setSelectedTable(null)}
+                    className="w-1/3 bg-stone-100 text-stone-700 py-3 rounded-2xl font-bold text-xs hover:bg-stone-200 transition"
+                  >
+                    Back
+                  </button>
+                  <button
+                    onClick={() => setShowPaymentModal(true)}
+                    className="w-2/3 bg-orange-600 hover:bg-orange-700 text-white py-3 rounded-2xl font-black text-xs shadow-md shadow-orange-600/20 flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 transition"
+                  >
+                    <Receipt size={16} />
+                    <span>Request Bill</span>
+                  </button>
+                </div>
+              ) : null}
             </div>
 
           </div>
@@ -896,6 +1203,295 @@ export default function WaiterDashboard() {
             >
               Cancel
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* 1. Add Shared Party Modal */}
+      {isAddPartyModalOpen && (
+        <div className="fixed inset-0 bg-stone-950/60 backdrop-blur-sm flex items-end sm:items-center justify-center z-60 p-4 transition-opacity">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl border border-stone-200 animate-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-start mb-3">
+              <div>
+                <h3 className="text-lg font-black text-stone-900 leading-tight">
+                  Add Shared Party
+                </h3>
+                <p className="text-xs text-stone-500 mt-0.5">
+                  Table #{selectedTable} • Spawn a separate virtual tab
+                </p>
+              </div>
+              <button
+                onClick={() => setIsAddPartyModalOpen(false)}
+                className="p-1 rounded-full text-stone-400 hover:text-stone-700 hover:bg-stone-100"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-3 my-4">
+              <div>
+                <label className="text-[10px] font-black uppercase tracking-wider text-stone-400 block mb-1">
+                  Party Identifier / Description
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Blue Shirt, Couple by Window, Party B"
+                  value={newPartyName}
+                  onChange={(e) => setNewPartyName(e.target.value)}
+                  className="w-full p-3 bg-stone-50 border border-stone-200 rounded-xl text-xs font-bold text-stone-900 outline-none focus:bg-white focus:border-purple-500 transition"
+                  autoFocus
+                />
+              </div>
+              <p className="text-[11px] text-stone-500 leading-relaxed bg-purple-50 p-2.5 rounded-xl border border-purple-100">
+                This creates an independent sub-tab with its own orders and check, keeping Group A&apos;s bill completely separate.
+              </p>
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => setIsAddPartyModalOpen(false)}
+                className="flex-1 py-3 rounded-xl bg-stone-100 text-stone-600 font-black text-xs hover:bg-stone-200 transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateSubTab}
+                disabled={isCreatingParty}
+                className="flex-[2] py-3 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-black text-xs shadow-md shadow-purple-600/20 active:scale-95 transition flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                {isCreatingParty ? (
+                  <span>Creating Tab...</span>
+                ) : (
+                  <>
+                    <Users size={14} />
+                    <span>Create Sub-Tab</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 2. Dynamic Guest QR Code Modal (Method B) */}
+      {showQrModal && (
+        <div className="fixed inset-0 bg-stone-950/60 backdrop-blur-sm flex items-end sm:items-center justify-center z-60 p-4 transition-opacity">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl border border-stone-200 animate-in zoom-in-95 duration-200 text-center">
+            <div className="flex justify-between items-start mb-3">
+              <div className="text-left">
+                <span className="text-[10px] font-black uppercase text-purple-700 bg-purple-100 px-2 py-0.5 rounded-md">
+                  Party Sub-Tab: {activeTabName}
+                </span>
+                <h3 className="text-lg font-black text-stone-900 leading-tight mt-1">
+                  Table #{selectedTable} Guest QR
+                </h3>
+              </div>
+              <button
+                onClick={() => {
+                  setShowQrModal(false);
+                  setCopiedLink(false);
+                }}
+                className="p-1 rounded-full text-stone-400 hover:text-stone-700 hover:bg-stone-100"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <p className="text-xs text-stone-500 mb-4 text-left">
+              Hold this screen out for the new guests to scan. They will order directly into their private party tab.
+            </p>
+
+            {/* QR Code Container */}
+            <div className="p-4 bg-stone-50 rounded-2xl border border-stone-200 inline-block mb-3">
+              <img
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(
+                  typeof window !== "undefined"
+                    ? `${window.location.origin}/customer/menu?table=${selectedTable}&session=${activeSessionId}`
+                    : ""
+                )}`}
+                alt="Guest Sub-Tab QR Code"
+                className="w-48 h-48 rounded-xl mx-auto shadow-xs"
+              />
+            </div>
+
+            <div className="flex items-center gap-2 mb-3">
+              <button
+                onClick={() => {
+                  if (typeof window !== "undefined") {
+                    const guestUrl = `${window.location.origin}/customer/menu?table=${selectedTable}&session=${activeSessionId}`;
+                    navigator.clipboard.writeText(guestUrl);
+                    setCopiedLink(true);
+                    setTimeout(() => setCopiedLink(false), 3000);
+                  }
+                }}
+                className="w-full py-2.5 px-3 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer"
+              >
+                {copiedLink ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
+                <span>{copiedLink ? "Link Copied!" : "Copy Guest Link"}</span>
+              </button>
+            </div>
+
+            <button
+              onClick={() => {
+                setShowQrModal(false);
+                setCopiedLink(false);
+              }}
+              className="w-full py-2 text-stone-400 hover:text-stone-700 text-xs font-bold"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 3. Waiter Mini-POS Modal (Method A) */}
+      {showMiniPosModal && (
+        <div className="fixed inset-0 bg-stone-950/70 backdrop-blur-sm flex items-end sm:items-center justify-center z-60 p-0 sm:p-4">
+          <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-lg max-h-[92vh] flex flex-col shadow-2xl border border-stone-200 animate-in slide-in-from-bottom-8 duration-200">
+            
+            {/* Mini-POS Header */}
+            <div className="p-4 border-b border-stone-200 flex justify-between items-center bg-[#faf9f6] rounded-t-3xl">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-lg font-black text-stone-900 leading-tight">
+                    Waiter Mini-POS
+                  </h3>
+                  <span className="text-[10px] font-black uppercase text-purple-700 bg-purple-100 border border-purple-200 px-2 py-0.5 rounded-md">
+                    Table #{selectedTable} • {activeTabName}
+                  </span>
+                </div>
+                <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider mt-0.5">
+                  Punch dishes directly to Kitchen KDS
+                </p>
+              </div>
+              <button
+                onClick={() => setShowMiniPosModal(false)}
+                className="p-1.5 rounded-full hover:bg-stone-100 text-stone-400 hover:text-stone-700"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Mini-POS Search & Category Filter */}
+            <div className="p-3 border-b border-stone-100 bg-white space-y-2">
+              <input
+                type="text"
+                placeholder="Search dish name..."
+                value={posSearch}
+                onChange={(e) => setPosSearch(e.target.value)}
+                className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-bold text-stone-900 outline-none focus:bg-white focus:border-orange-500 transition"
+              />
+              <div className="flex gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+                {["All", "Veg Starters", "Non Veg Starters", "Breads", "Rices/Noodles", "Desserts"].map((cat) => (
+                  <button
+                    key={cat}
+                    onClick={() => setPosCategoryFilter(cat)}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap transition cursor-pointer ${
+                      posCategoryFilter === cat
+                        ? "bg-orange-600 text-white shadow-xs"
+                        : "bg-stone-100 text-stone-600 hover:bg-stone-200"
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Menu Items List */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-2.5 divide-y divide-stone-100">
+              {menuItems
+                .filter((item) => {
+                  const matchSearch = item.name.toLowerCase().includes(posSearch.toLowerCase());
+                  const matchCat = posCategoryFilter === "All" || item.category === posCategoryFilter;
+                  return matchSearch && matchCat;
+                })
+                .map((dish) => {
+                  const inCart = miniPosCart.find((c) => c.menuItemId === dish.id);
+                  const qty = inCart?.quantity || 0;
+
+                  return (
+                    <div key={dish.id} className="pt-2.5 flex justify-between items-center gap-3">
+                      <div>
+                        <p className="font-black text-xs text-stone-900">{dish.name}</p>
+                        <p className="text-[11px] font-bold text-orange-600">₹{dish.price}</p>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 bg-stone-100 rounded-xl p-0.5 border border-stone-200">
+                        {qty > 0 && (
+                          <>
+                            <button
+                              onClick={() => {
+                                setMiniPosCart((prev) =>
+                                  prev
+                                    .map((i) =>
+                                      i.menuItemId === dish.id ? { ...i, quantity: i.quantity - 1 } : i
+                                    )
+                                    .filter((i) => i.quantity > 0)
+                                );
+                              }}
+                              className="p-1 rounded-lg bg-white text-stone-700 hover:bg-stone-200 transition"
+                            >
+                              <Minus size={13} />
+                            </button>
+                            <span className="w-5 text-center text-xs font-black">{qty}</span>
+                          </>
+                        )}
+                        <button
+                          onClick={() => {
+                            setMiniPosCart((prev) => {
+                              const existing = prev.find((i) => i.menuItemId === dish.id);
+                              if (existing) {
+                                return prev.map((i) =>
+                                  i.menuItemId === dish.id ? { ...i, quantity: i.quantity + 1 } : i
+                                );
+                              }
+                              return [
+                                ...prev,
+                                {
+                                  menuItemId: dish.id,
+                                  name: dish.name,
+                                  price: dish.price,
+                                  quantity: 1,
+                                },
+                              ];
+                            });
+                          }}
+                          className="p-1 rounded-lg bg-white text-stone-700 hover:bg-stone-200 transition"
+                        >
+                          <Plus size={13} />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+
+            {/* Bottom Punch Action */}
+            <div className="p-4 border-t border-stone-200 bg-white flex justify-between items-center gap-3">
+              <div>
+                <span className="text-[10px] font-bold text-stone-400 uppercase tracking-widest block">
+                  Items to Send
+                </span>
+                <p className="text-base font-black text-stone-900">
+                  {miniPosCart.reduce((sum, i) => sum + i.quantity, 0)} items • ₹
+                  {miniPosCart.reduce((sum, i) => sum + i.price * i.quantity, 0)}
+                </p>
+              </div>
+
+              <button
+                onClick={handlePunchMiniPosOrder}
+                disabled={miniPosCart.length === 0 || isSubmittingPosOrder}
+                className={`py-3.5 px-6 rounded-2xl font-black text-xs uppercase tracking-wider transition shadow-md flex items-center gap-2 cursor-pointer ${
+                  miniPosCart.length === 0 || isSubmittingPosOrder
+                    ? "bg-stone-200 text-stone-400 cursor-not-allowed shadow-none"
+                    : "bg-orange-600 hover:bg-orange-700 text-white shadow-orange-600/25 active:scale-95"
+                }`}
+              >
+                <span>{isSubmittingPosOrder ? "Sending..." : "Send to Kitchen 🚀"}</span>
+              </button>
+            </div>
+
           </div>
         </div>
       )}

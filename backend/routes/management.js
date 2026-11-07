@@ -14,7 +14,7 @@ router.get("/billing/history", async (req, res) => {
     const { data: enrichedData, error: enrichedError } = await supabase
       .from("orders")
       .select(`
-        id, total_amount, created_at, serve_count,
+        id, total_amount, original_amount, discount_amount, created_at, serve_count,
         waiter_id,
         staff:waiter_id ( id, name, employee_id ),
         tables ( table_number ),
@@ -32,7 +32,7 @@ router.get("/billing/history", async (req, res) => {
       const { data: fallbackData, error: fallbackError } = await supabase
         .from("orders")
         .select(`
-          id, total_amount, created_at, serve_count,
+          id, total_amount, original_amount, discount_amount, created_at, serve_count,
           tables ( table_number ),
           payments ( payment_method, payment_status )
         `)
@@ -59,7 +59,9 @@ router.get("/billing/history", async (req, res) => {
       return {
         id: `ORD-${order.id.substring(0, 6).toUpperCase()}`,
         tableNumber: order.tables?.table_number || 0,
-        totalAmount: order.total_amount,
+        totalAmount: Number(order.total_amount),
+        originalAmount: Number(order.original_amount !== null && order.original_amount !== undefined ? order.original_amount : order.total_amount),
+        discountAmount: Number(order.discount_amount || 0),
         paymentMethod: paymentInfo?.payment_method || "pending",
         paymentStatus: paymentInfo?.payment_status || "pending",
         createdAt: order.created_at,

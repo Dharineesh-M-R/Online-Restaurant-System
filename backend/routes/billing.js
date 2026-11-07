@@ -18,6 +18,7 @@ router.get("/tables", async (req, res) => {
         table_sessions (
           session_id,
           status,
+          tab_name,
           assigned_waiter_id,
           staff:assigned_waiter_id ( id, name, employee_id ),
           orders (
@@ -50,6 +51,7 @@ router.get("/tables", async (req, res) => {
           table_sessions (
             session_id,
             status,
+            tab_name,
             orders (
               id,
               order_serves (
@@ -72,93 +74,107 @@ router.get("/tables", async (req, res) => {
       tables = enrichedTables;
     }
 
-    const formattedTables = (tables || []).map(t => {
-      const activeSession = t.table_sessions?.find(s => s.status !== 'completed' && s.status !== 'cancelled');
-      
-      let dynamicTotal = 0;
-      let orderId = null;
-      let rawItems = [];
-      let chefSet = new Set();
+    const formattedTables = [];
 
-      // Extract waiter info
-      const assignedWaiter = activeSession?.staff?.name || 
-        (activeSession?.orders?.[0]?.staff?.name) || 
-        null;
+    (tables || []).forEach(t => {
+      const activeSessions = (t.table_sessions || []).filter(
+        s => s.status !== 'completed' && s.status !== 'cancelled'
+      );
 
-      // Calculate total and extract items
-      if (activeSession && activeSession.orders && activeSession.orders.length > 0) {
-        const currentOrder = activeSession.orders[0];
-        orderId = currentOrder.id;
-        
-        currentOrder.order_serves?.forEach(serve => {
-          serve.order_items?.forEach(item => {
-            const isOOS = item.status === 'out_of_stock' || (item.notes && item.notes.includes('[OUT OF STOCK'));
+      if (activeSessions.length === 0) {
+        formattedTables.push({
+          id: t.id,
+          tableNumber: t.table_number,
+          tabName: "Main",
+          status: "Available",
+          paymentMethod: null,
+          sessionId: null,
+          orderId: null,
+          itemTotal: 0,
+          waiterName: null,
+          chefs: [],
+          items: []
+        });
+      } else {
+        // One billing card per active party session
+        activeSessions.forEach(activeSession => {
+          let dynamicTotal = 0;
+          let orderId = null;
+          let rawItems = [];
+          let chefSet = new Set();
+
+          const assignedWaiter = activeSession?.staff?.name || 
+            (activeSession?.orders?.[0]?.staff?.name) || 
+            null;
+
+          if (activeSession.orders && activeSession.orders.length > 0) {
+            const currentOrder = activeSession.orders[0];
+            orderId = currentOrder.id;
             
-            // Only bill items that are NOT out of stock
-            if (!isOOS) {
-              const itemTotal = Number(item.price) * Number(item.quantity);
-              dynamicTotal += itemTotal;
-              
-              if (item.staff?.name) {
-                chefSet.add(item.staff.name);
-              }
+            currentOrder.order_serves?.forEach(serve => {
+              serve.order_items?.forEach(item => {
+                const isOOS = item.status === 'out_of_stock' || (item.notes && item.notes.includes('[OUT OF STOCK'));
+                
+                if (!isOOS) {
+                  const itemTotal = Number(item.price) * Number(item.quantity);
+                  dynamicTotal += itemTotal;
+                  
+                  if (item.staff?.name) {
+                    chefSet.add(item.staff.name);
+                  }
 
-              if (item.menu_items) {
-                 rawItems.push({
-                   name: item.menu_items.name,
-                   quantity: item.quantity,
-                   price: itemTotal,
-                   chefName: item.staff?.name || null
-                 });
-              }
+                  if (item.menu_items) {
+                     rawItems.push({
+                       name: item.menu_items.name,
+                       quantity: item.quantity,
+                       price: itemTotal,
+                       chefName: item.staff?.name || null
+                     });
+                  }
+                }
+              });
+            });
+          }
+
+          const consolidatedItems = Object.values(rawItems.reduce((acc, curr) => {
+            if (acc[curr.name]) {
+                acc[curr.name].quantity += curr.quantity;
+                acc[curr.name].price += curr.price;
+                if (curr.chefName && !acc[curr.name].chefs?.includes(curr.chefName)) {
+                  acc[curr.name].chefs = [...(acc[curr.name].chefs || []), curr.chefName];
+                }
+            } else {
+                acc[curr.name] = { 
+                  ...curr,
+                  chefs: curr.chefName ? [curr.chefName] : [] 
+                };
             }
+            return acc;
+          }, {}));
+
+          const isBilled = activeSession.status.startsWith("billed");
+          let paymentMethod = null;
+          if (isBilled && activeSession.status.includes("_")) {
+            paymentMethod = activeSession.status.split("_")[1];
+          }
+
+          formattedTables.push({
+            id: activeSession.session_id, // unique per sub-tab session
+            tableId: t.id,
+            tableNumber: t.table_number,
+            tabName: activeSession.tab_name || "Main",
+            isSubTab: Boolean(activeSession.tab_name && activeSession.tab_name !== "Main"),
+            status: isBilled ? "Billed" : "Occupied",
+            paymentMethod: paymentMethod,
+            sessionId: activeSession.session_id,
+            orderId: orderId,
+            itemTotal: dynamicTotal,
+            waiterName: assignedWaiter,
+            chefs: Array.from(chefSet),
+            items: consolidatedItems
           });
         });
       }
-
-      // Consolidate duplicate items for a cleaner bill
-      const consolidatedItems = Object.values(rawItems.reduce((acc, curr) => {
-        if (acc[curr.name]) {
-            acc[curr.name].quantity += curr.quantity;
-            acc[curr.name].price += curr.price;
-            if (curr.chefName && !acc[curr.name].chefs?.includes(curr.chefName)) {
-              acc[curr.name].chefs = [...(acc[curr.name].chefs || []), curr.chefName];
-            }
-        } else {
-            acc[curr.name] = { 
-              ...curr,
-              chefs: curr.chefName ? [curr.chefName] : [] 
-            };
-        }
-        return acc;
-      }, {}));
-
-      // Determine Table Status
-      let displayStatus = "Available";
-      let paymentMethod = null;
-
-      if (activeSession) {
-        displayStatus = "Occupied";
-        if (activeSession.status.startsWith("billed")) {
-          displayStatus = "Billed";
-          if (activeSession.status.includes("_")) {
-            paymentMethod = activeSession.status.split("_")[1];
-          }
-        }
-      }
-
-      return {
-        id: t.id,
-        tableNumber: t.table_number,
-        status: displayStatus,
-        paymentMethod: paymentMethod,
-        sessionId: activeSession?.session_id || null,
-        orderId: orderId,
-        itemTotal: dynamicTotal,
-        waiterName: assignedWaiter,
-        chefs: Array.from(chefSet),
-        items: consolidatedItems
-      };
     });
 
     res.json({ tables: formattedTables });
@@ -170,13 +186,24 @@ router.get("/tables", async (req, res) => {
 
 // 2. Process Checkout & Free the Table
 router.post("/checkout", async (req, res) => {
-  const { orderId, sessionId, tableNumber, paymentMethod, finalAmount } = req.body;
+  const { orderId, sessionId, tableNumber, paymentMethod, finalAmount, originalAmount, discountAmount } = req.body;
 
   try {
-    // A. Update Order to Completed
+    // A. Update Order to Completed (save final amount, original price, and offer discount)
+    const orderUpdatePayload = {
+      order_status: "completed",
+      total_amount: Number(finalAmount),
+    };
+    if (originalAmount !== undefined && originalAmount !== null) {
+      orderUpdatePayload.original_amount = Number(originalAmount);
+    }
+    if (discountAmount !== undefined && discountAmount !== null) {
+      orderUpdatePayload.discount_amount = Number(discountAmount);
+    }
+
     await supabase
       .from("orders")
-      .update({ order_status: "completed" })
+      .update(orderUpdatePayload)
       .eq("id", orderId);
 
     // B. Save Payment Record

@@ -3,35 +3,66 @@ import supabase from "../supabase.js";
 
 const router = express.Router();
 
-// 1. Get Active Session (or Create a New One)
+// 1. Get Active Session (or Create a New One, or load specific Sub-Tab session)
 router.get("/", async (req, res) => {
-  const { table } = req.query;
-  if (!table) return res.status(400).json({ error: "Table number is required" });
+  const { table, session } = req.query;
+  if (!table && !session) return res.status(400).json({ error: "Table number or session ID is required" });
 
   try {
+    // If a specific sub-tab session ID was scanned/requested
+    if (session) {
+      const { data: specificSession, error: specificErr } = await supabase
+        .from("table_sessions")
+        .select("session_id, table_number, cart_items, tab_name, status")
+        .eq("session_id", session)
+        .neq("status", "completed")
+        .neq("status", "cancelled")
+        .maybeSingle();
+
+      if (specificSession) {
+        return res.json({
+          sessionId: specificSession.session_id,
+          cart: specificSession.cart_items || [],
+          tabName: specificSession.tab_name || "Main",
+          tableNumber: specificSession.table_number,
+        });
+      }
+    }
+
+    // Default to main active session for the table
     const { data: activeSession, error: fetchError } = await supabase
       .from("table_sessions")
-      .select("session_id, cart_items")
+      .select("session_id, cart_items, tab_name")
       .eq("table_number", table)
       .neq("status", "completed") 
       .neq("status", "cancelled") 
-      .order("created_at", { ascending: false }) // 🔥 FIX 1: Sort by newest first
-      .limit(1)                                  // 🔥 FIX 2: Force only 1 row to fix PGRST116
+      .order("created_at", { ascending: false }) // Sort by newest first
+      .limit(1)
       .maybeSingle(); 
 
     if (fetchError) throw fetchError;
 
     if (activeSession) {
-      return res.json({ sessionId: activeSession.session_id, cart: activeSession.cart_items || [] });
+      return res.json({
+        sessionId: activeSession.session_id,
+        cart: activeSession.cart_items || [],
+        tabName: activeSession.tab_name || "Main",
+      });
     }
 
     const newSessionId = `sess_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
     const { error: insertError } = await supabase
       .from("table_sessions")
-      .insert([{ session_id: newSessionId, table_number: table, status: "active", cart_items: [] }]);
+      .insert([{
+        session_id: newSessionId,
+        table_number: table,
+        status: "active",
+        cart_items: [],
+        tab_name: "Main"
+      }]);
 
     if (insertError) throw insertError;
-    res.json({ sessionId: newSessionId, cart: [] });
+    res.json({ sessionId: newSessionId, cart: [], tabName: "Main" });
 
   } catch (err) {
     console.error("Get Session Error:", err);
@@ -46,7 +77,7 @@ router.get("/:sessionId/sync", async (req, res) => {
   try {
     const { data: sessionData, error: sessionErr } = await supabase
       .from("table_sessions")
-      .select("table_number, cart_items, status")
+      .select("table_number, cart_items, status, tab_name")
       .eq("session_id", sessionId)
       .neq("status", "completed")
       .neq("status", "cancelled") // 🔥 FIX: Forces a 404 if the session was force closed!
@@ -128,7 +159,9 @@ router.get("/:sessionId/sync", async (req, res) => {
     res.json({
       cart: sessionData.cart_items || [],
       serves: formattedServes,
-      sessionStatus: sessionData.status
+      sessionStatus: sessionData.status,
+      tabName: sessionData.tab_name || "Main",
+      tableNumber: sessionData.table_number,
     });
   } catch (err) {
     console.error("Sync Error:", err);

@@ -27,6 +27,7 @@ function CartProviderInner({ children }: { children: ReactNode }) {
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const urlTable = searchParams.get("table");
+  const urlSession = searchParams.get("session");
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
@@ -36,6 +37,7 @@ function CartProviderInner({ children }: { children: ReactNode }) {
   const [serveCount, setServeCount] = useState(0);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [tableNumber, setTableNumber] = useState<string | null>(null);
+  const [tabName, setTabName] = useState<string>("Main");
   const [sessionStatus, setSessionStatus] = useState<string | null>(null);
   const [outOfStockAlerts, setOutOfStockAlerts] = useState<string[]>([]);
   const dismissedAlertsRef = useRef<Set<string>>(new Set());
@@ -115,7 +117,10 @@ function CartProviderInner({ children }: { children: ReactNode }) {
       const storedSessionId = localStorage.getItem("restaurant_sessionId");
       const storedTable = localStorage.getItem("restaurant_table");
 
-      if (urlTable && urlTable !== storedTable) {
+      if (urlSession) {
+        // If diner scanned a dynamic sub-tab QR code for a shared party
+        localStorage.setItem("restaurant_sessionId", urlSession);
+      } else if (urlTable && urlTable !== storedTable) {
         localStorage.removeItem("restaurant_sessionId");
       } else if (storedSessionId) {
         try {
@@ -136,7 +141,8 @@ function CartProviderInner({ children }: { children: ReactNode }) {
       }
 
       try {
-        const res = await fetch(`${apiUrl}/sessions?table=${activeTable}`);
+        const sessionQuery = urlSession ? `&session=${urlSession}` : "";
+        const res = await fetch(`${apiUrl}/sessions?table=${activeTable}${sessionQuery}`);
         if (!res.ok) {
           const errorData = await res.json();
           throw new Error(
@@ -146,6 +152,7 @@ function CartProviderInner({ children }: { children: ReactNode }) {
         const data = await res.json();
 
         setSessionId(data.sessionId);
+        if (data.tabName) setTabName(data.tabName);
         localStorage.setItem("restaurant_sessionId", data.sessionId);
       } catch (err) {
         console.error("Session Initialization Error:", err);
@@ -155,7 +162,7 @@ function CartProviderInner({ children }: { children: ReactNode }) {
     };
 
     initializeSession();
-  }, [urlTable, apiUrl]);
+  }, [urlTable, urlSession, apiUrl]);
 
   // --- 2. GLOBAL POLLING ---
   useEffect(() => {
@@ -180,6 +187,7 @@ function CartProviderInner({ children }: { children: ReactNode }) {
           setPlacedServes(data.serves);
           setServeCount(data.serves.length);
           setSessionStatus(data.sessionStatus);
+          if (data.tabName) setTabName(data.tabName);
 
           const detectedOutOfStock: string[] = [];
           (data.serves || []).forEach((serve: PlacedServe) => {
@@ -345,6 +353,7 @@ function CartProviderInner({ children }: { children: ReactNode }) {
         cart,
         sessionId,
         tableNumber,
+        tabName,
         addToCart,
         updateQuantity,
         updateNotes,
