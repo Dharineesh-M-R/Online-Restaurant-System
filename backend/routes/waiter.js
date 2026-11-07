@@ -3,15 +3,19 @@ import supabase from "../supabase.js";
 
 const router = express.Router();
 
-// 1. Fetch items that the kitchen has marked as 'ready'
+// 1. Fetch items that the kitchen has marked as 'ready' (including which chef cooked them)
 router.get("/tasks", async (req, res) => {
   try {
-    const { data: readyItems, error } = await supabase
+    let readyItems = null;
+    
+    // Attempt enriched query with chef tracking join
+    const { data: enrichedData, error: enrichedError } = await supabase
       .from("order_items")
       .select(`
         id,
         quantity,
         menu_items ( name ),
+        staff:chef_id ( id, name, employee_id ),
         order_serves (
           serve_number,
           orders (
@@ -21,14 +25,37 @@ router.get("/tasks", async (req, res) => {
       `)
       .eq("status", "ready");
 
-    if (error) throw error;
+    if (enrichedError) {
+      // Fallback if chef_id column or foreign key not yet added in DB
+      const { data: fallbackData, error: fallbackError } = await supabase
+        .from("order_items")
+        .select(`
+          id,
+          quantity,
+          menu_items ( name ),
+          order_serves (
+            serve_number,
+            orders (
+              tables ( table_number )
+            )
+          )
+        `)
+        .eq("status", "ready");
 
-    const formattedTasks = readyItems.map((item) => ({
+      if (fallbackError) throw fallbackError;
+      readyItems = fallbackData;
+    } else {
+      readyItems = enrichedData;
+    }
+
+    const formattedTasks = (readyItems || []).map((item) => ({
       id: item.id,
       name: item.menu_items?.name || "Unknown Item",
       quantity: item.quantity,
       tableNumber: item.order_serves?.orders?.tables?.table_number || 0,
       serveNumber: item.order_serves?.serve_number || 1,
+      chefName: item.staff?.name || null,
+      chefEmployeeId: item.staff?.employee_id || null,
     }));
 
     res.json({ tasks: formattedTasks });
@@ -61,10 +88,13 @@ router.patch("/update-item", async (req, res) => {
   }
 });
 
-// 3. Fetch all tables and their current occupancy status
+// 3. Fetch all tables, occupancy status, and which waiter is assigned
 router.get("/floor-plan", async (req, res) => {
   try {
-    const { data: tables, error } = await supabase
+    let tables = null;
+
+    // Enriched query with assigned waiter
+    const { data: enrichedTables, error: enrichedError } = await supabase
       .from("tables")
       .select(`
         table_number,
@@ -72,32 +102,81 @@ router.get("/floor-plan", async (req, res) => {
         table_sessions (
           status,
           needs_waiter,
+          assigned_waiter_id,
+          staff:assigned_waiter_id ( id, name, employee_id ),
           orders (
+            waiter_id,
             order_serves (
-              order_items ( status )
+              order_items ( status, notes, menu_items ( name ) )
             )
           )
         )
       `)
       .order('table_number', { ascending: true });
 
-    if (error) throw error;
+    if (enrichedError) {
+      // Fallback query if assigned_waiter_id column is not yet present
+      const { data: fallbackTables, error: fallbackError } = await supabase
+        .from("tables")
+        .select(`
+          table_number,
+          status,
+          table_sessions (
+            status,
+            needs_waiter,
+            orders (
+              order_serves (
+                order_items ( status, notes, menu_items ( name ) )
+              )
+            )
+          )
+        `)
+        .order('table_number', { ascending: true });
 
-    const floorData = tables.map(t => {
+      if (fallbackError) throw fallbackError;
+      tables = fallbackTables;
+    } else {
+      tables = enrichedTables;
+    }
+
+    const floorData = (tables || []).map(t => {
       const activeSession = t.table_sessions?.find(s => s.status !== 'completed' && s.status !== 'cancelled');
       
-      const hasUnconfirmed = activeSession?.orders?.some(order => 
-        order.order_serves?.some(serve => 
-          serve.order_items?.some(item => item.status === 'waiting_confirmation')
-        )
-      ) || false;
+      let hasUnconfirmed = false;
+      let hasOutOfStock = false;
+      const outOfStockItems = [];
+
+      activeSession?.orders?.forEach(order => {
+        order.order_serves?.forEach(serve => {
+          serve.order_items?.forEach(item => {
+            if (item.status === 'waiting_confirmation') {
+              hasUnconfirmed = true;
+            }
+            if (item.status === 'out_of_stock' || (item.notes && item.notes.includes('[OUT OF STOCK'))) {
+              hasOutOfStock = true;
+              if (item.menu_items?.name && !outOfStockItems.includes(item.menu_items.name)) {
+                outOfStockItems.push(item.menu_items.name);
+              }
+            }
+          });
+        });
+      });
+
+      const assignedWaiter = activeSession?.staff ? {
+        id: activeSession.staff.id,
+        name: activeSession.staff.name,
+        employeeId: activeSession.staff.employee_id
+      } : null;
 
       return {
         number: t.table_number,
         isOccupied: !!activeSession,
         needsHelp: activeSession?.needs_waiter || false,
         hasUnconfirmed: hasUnconfirmed,
-        sessionStatus: activeSession?.status || null
+        hasOutOfStock: hasOutOfStock,
+        outOfStockItems: outOfStockItems,
+        sessionStatus: activeSession?.status || null,
+        assignedWaiter: assignedWaiter
       };
     });
 
@@ -113,16 +192,32 @@ router.get("/table-details/:tableNumber", async (req, res) => {
   const { tableNumber } = req.params;
 
   try {
-    const { data: session, error: sessionError } = await supabase
+    let session = null;
+    
+    // Try query with assigned waiter
+    const { data: enrichedSession, error: enrichedErr } = await supabase
       .from("table_sessions")
-      .select("session_id, status")
+      .select("session_id, status, assigned_waiter_id, staff:assigned_waiter_id ( id, name, employee_id )")
       .eq("table_number", tableNumber)
       .neq("status", "completed") 
       .neq("status", "cancelled")
-      .single();
+      .maybeSingle();
 
-    if (sessionError || !session) {
-      return res.status(404).json({ error: "No active session found" });
+    if (enrichedErr || !enrichedSession) {
+      const { data: fallbackSession, error: sessionError } = await supabase
+        .from("table_sessions")
+        .select("session_id, status")
+        .eq("table_number", tableNumber)
+        .neq("status", "completed") 
+        .neq("status", "cancelled")
+        .maybeSingle();
+
+      if (sessionError || !fallbackSession) {
+        return res.status(404).json({ error: "No active session found" });
+      }
+      session = fallbackSession;
+    } else {
+      session = enrichedSession;
     }
 
     const { data: items, error: itemsError } = await supabase
@@ -143,31 +238,78 @@ router.get("/table-details/:tableNumber", async (req, res) => {
 
     if (itemsError) throw itemsError;
 
-    const formattedItems = items.map(item => ({
+    const formattedItems = (items || []).map(item => ({
       id: item.id, 
-      name: item.menu_items.name,
+      name: item.menu_items?.name || "Unknown Dish",
       quantity: item.quantity,
       status: item.status,
-      serve: item.order_serves.serve_number,
+      isOutOfStock: item.status === 'out_of_stock' || (item.notes && item.notes.includes('[OUT OF STOCK')),
+      serve: item.order_serves?.serve_number || 1,
       notes: item.notes
     }));
 
-    // 🔥 FIX: Returning sessionId so the Waiter frontend can cancel ghost sessions
-    res.json({ sessionId: session.session_id,sessionStatus: session.status, items: formattedItems });
+    res.json({ 
+      sessionId: session.session_id,
+      sessionStatus: session.status,
+      assignedWaiter: session.staff ? {
+        id: session.staff.id,
+        name: session.staff.name,
+        employeeId: session.staff.employee_id
+      } : null,
+      items: formattedItems 
+    });
   } catch (err) {
     console.error("Table Details Error:", err);
     res.status(500).json({ error: "Internal server error" });
   }
 });
 
-// 5. Confirm, Update, or Delete items before sending to Kitchen
+// 5. Confirm, Update, or Delete items before sending to Kitchen (and assign waiter)
 router.patch("/confirm-items", async (req, res) => {
-  const { items } = req.body; 
+  const { items, waiterId, tableNumber } = req.body; 
 
   try {
-    for (const item of items) {
+    for (const item of (items || [])) {
       if (item.action === 'delete') {
+        // Fetch item details before deletion to recalculate order total
+        const { data: itemToDelete } = await supabase
+          .from("order_items")
+          .select(`
+            id,
+            price,
+            quantity,
+            order_serves (
+              order_id,
+              orders ( id, total_amount, session_id )
+            )
+          `)
+          .eq("id", item.id)
+          .single();
+
         await supabase.from("order_items").delete().eq("id", item.id);
+
+        if (itemToDelete?.order_serves?.orders) {
+          const order = itemToDelete.order_serves.orders;
+          const cost = Number(itemToDelete.price || 0) * Number(itemToDelete.quantity || 1);
+          const newTotal = Math.max(0, Number(order.total_amount || 0) - cost);
+          await supabase.from("orders").update({ total_amount: newTotal }).eq("id", order.id);
+
+          // Clear needs_waiter on the session if no more out-of-stock items remain
+          if (order.session_id) {
+            const { data: remainingOos } = await supabase
+              .from("order_items")
+              .select("id, order_serves!inner(order_id, orders!inner(session_id))")
+              .eq("order_serves.orders.session_id", order.session_id)
+              .eq("status", "out_of_stock");
+
+            if (!remainingOos || remainingOos.length === 0) {
+              await supabase
+                .from("table_sessions")
+                .update({ needs_waiter: false })
+                .eq("session_id", order.session_id);
+            }
+          }
+        }
       } else if (item.action === 'confirm') {
         await supabase
           .from("order_items")
@@ -178,6 +320,37 @@ router.patch("/confirm-items", async (req, res) => {
           .eq("id", item.id);
       }
     }
+
+    // If waiterId was provided, update table_sessions and orders to record which waiter confirmed the order
+    if (waiterId && tableNumber) {
+      try {
+        await supabase
+          .from("table_sessions")
+          .update({ assigned_waiter_id: waiterId })
+          .eq("table_number", tableNumber)
+          .neq("status", "completed")
+          .neq("status", "cancelled");
+
+        // Also record waiter on active order
+        const { data: activeSession } = await supabase
+          .from("table_sessions")
+          .select("session_id")
+          .eq("table_number", tableNumber)
+          .neq("status", "completed")
+          .neq("status", "cancelled")
+          .maybeSingle();
+
+        if (activeSession) {
+          await supabase
+            .from("orders")
+            .update({ waiter_id: waiterId })
+            .eq("session_id", activeSession.session_id);
+        }
+      } catch (assignErr) {
+        console.warn("Could not record assigned_waiter_id (columns may not exist yet):", assignErr.message);
+      }
+    }
+
     res.json({ success: true, message: "Order items updated/confirmed" });
   } catch (err) {
     console.error("Confirm Items Error:", err);
@@ -185,29 +358,81 @@ router.patch("/confirm-items", async (req, res) => {
   }
 });
 
-// 6. Clear the 'Call Waiter' alert for a specific table
+// 6. Clear the 'Call Waiter' alert for a specific table (and assign waiter)
 router.patch("/attend-table", async (req, res) => {
-  const { tableNumber } = req.body;
+  const { tableNumber, waiterId } = req.body;
 
   try {
+    const updatePayload = { needs_waiter: false };
+    if (waiterId) {
+      updatePayload.assigned_waiter_id = waiterId;
+    }
+
+    // Try with assigned_waiter_id
     const { error } = await supabase
       .from("table_sessions")
-      .update({ needs_waiter: false })
+      .update(updatePayload)
       .eq("table_number", tableNumber)
       .neq("status", "completed");
 
-    if (error) throw error;
+    if (error) {
+      // Fallback without assigned_waiter_id if column not created yet
+      await supabase
+        .from("table_sessions")
+        .update({ needs_waiter: false })
+        .eq("table_number", tableNumber)
+        .neq("status", "completed");
+    }
 
-    res.json({ success: true, message: "Alert cleared" });
+    res.json({ success: true, message: "Alert cleared and table attended" });
   } catch (err) {
     console.error("Attend Table Error:", err);
     res.status(500).json({ error: "Failed to clear alert" });
   }
 });
 
-// 7. Waiter manually requests bill for a table
+// 7. Explicitly assign/claim a table by a waiter
+router.patch("/assign-waiter", async (req, res) => {
+  const { tableNumber, waiterId } = req.body;
+
+  try {
+    const { error } = await supabase
+      .from("table_sessions")
+      .update({ assigned_waiter_id: waiterId || null })
+      .eq("table_number", tableNumber)
+      .neq("status", "completed")
+      .neq("status", "cancelled");
+
+    if (error) throw error;
+
+    // Also update order if session exists
+    const { data: session } = await supabase
+      .from("table_sessions")
+      .select("session_id")
+      .eq("table_number", tableNumber)
+      .neq("status", "completed")
+      .neq("status", "cancelled")
+      .maybeSingle();
+
+    if (session && waiterId) {
+      try {
+        await supabase
+          .from("orders")
+          .update({ waiter_id: waiterId })
+          .eq("session_id", session.session_id);
+      } catch (oErr) {}
+    }
+
+    res.json({ success: true, message: waiterId ? "Table assigned to you" : "Table unassigned" });
+  } catch (err) {
+    console.error("Assign Waiter Error:", err);
+    res.status(500).json({ error: "Failed to assign waiter to table" });
+  }
+});
+
+// 8. Waiter manually requests bill for a table
 router.patch("/request-bill", async (req, res) => {
-  const { tableNumber, paymentMethod } = req.body; 
+  const { tableNumber, paymentMethod, waiterId } = req.body; 
 
   try {
     const { data: session, error: sessionErr } = await supabase
@@ -221,13 +446,20 @@ router.patch("/request-bill", async (req, res) => {
     if (sessionErr || !session) return res.status(404).json({ error: "No active session" });
 
     const finalStatus = paymentMethod ? `billed_${paymentMethod}` : "billed";
+    const updatePayload = { status: finalStatus };
+    if (waiterId) updatePayload.assigned_waiter_id = waiterId;
 
-    const { error: updateErr } = await supabase
-      .from("table_sessions")
-      .update({ status: finalStatus })
-      .eq("session_id", session.session_id);
-
-    if (updateErr) throw updateErr;
+    try {
+      await supabase
+        .from("table_sessions")
+        .update(updatePayload)
+        .eq("session_id", session.session_id);
+    } catch (e) {
+      await supabase
+        .from("table_sessions")
+        .update({ status: finalStatus })
+        .eq("session_id", session.session_id);
+    }
 
     res.json({ success: true, message: "Bill requested" });
   } catch (err) {

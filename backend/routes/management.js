@@ -4,23 +4,58 @@ import supabase from "../supabase.js";
 const router = express.Router();
 
 // ==========================================
-// BILLING ROUTES
+// BILLING ROUTES (with Waiter and Chef monitoring)
 // ==========================================
 router.get("/billing/history", async (req, res) => {
   try {
-    const { data: ordersData, error } = await supabase
+    let ordersData = null;
+
+    // Try enriched query with waiter and chef relations
+    const { data: enrichedData, error: enrichedError } = await supabase
       .from("orders")
       .select(`
         id, total_amount, created_at, serve_count,
+        waiter_id,
+        staff:waiter_id ( id, name, employee_id ),
         tables ( table_number ),
-        payments ( payment_method, payment_status )
+        payments ( payment_method, payment_status ),
+        order_serves (
+          order_items (
+            staff:chef_id ( name )
+          )
+        )
       `)
       .order("created_at", { ascending: false });
 
-    if (error) throw error;
+    if (enrichedError) {
+      // Fallback query if columns not yet added
+      const { data: fallbackData, error: fallbackError } = await supabase
+        .from("orders")
+        .select(`
+          id, total_amount, created_at, serve_count,
+          tables ( table_number ),
+          payments ( payment_method, payment_status )
+        `)
+        .order("created_at", { ascending: false });
 
-    const formattedOrders = ordersData.map((order) => {
+      if (fallbackError) throw fallbackError;
+      ordersData = fallbackData;
+    } else {
+      ordersData = enrichedData;
+    }
+
+    const formattedOrders = (ordersData || []).map((order) => {
       const paymentInfo = Array.isArray(order.payments) ? order.payments[0] : order.payments;
+
+      const chefSet = new Set();
+      order.order_serves?.forEach((serve) => {
+        serve.order_items?.forEach((item) => {
+          if (item.staff?.name) {
+            chefSet.add(item.staff.name);
+          }
+        });
+      });
+
       return {
         id: `ORD-${order.id.substring(0, 6).toUpperCase()}`,
         tableNumber: order.tables?.table_number || 0,
@@ -28,7 +63,10 @@ router.get("/billing/history", async (req, res) => {
         paymentMethod: paymentInfo?.payment_method || "pending",
         paymentStatus: paymentInfo?.payment_status || "pending",
         createdAt: order.created_at,
-        serveCount: order.serve_count
+        serveCount: order.serve_count,
+        waiterName: order.staff?.name || "Unassigned",
+        waiterEmployeeId: order.staff?.employee_id || null,
+        chefs: Array.from(chefSet)
       };
     });
 
@@ -65,11 +103,10 @@ router.get("/menu", async (req, res) => {
         id, name, description, price, is_available, image_url, category_id,
         categories ( name )
       `)
-      .order("name"); // Removed .order("category") which was crashing the query!
+      .order("name");
 
     if (error) throw error;
 
-    // Flatten the category name so the frontend can read it easily
     const formattedData = data.map(item => ({
       ...item,
       category_name: item.categories?.name || "Unknown Category"

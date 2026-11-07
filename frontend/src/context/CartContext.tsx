@@ -11,6 +11,7 @@ import {
   useRef,
 } from "react";
 import { useSearchParams, usePathname } from "next/navigation";
+import { AlertTriangle, X } from "lucide-react";
 import { Dish, CartItem, PlacedServe, CartContextType } from "../types/cart";
 import {
   getDistanceFromLatLonInM,
@@ -36,6 +37,8 @@ function CartProviderInner({ children }: { children: ReactNode }) {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [tableNumber, setTableNumber] = useState<string | null>(null);
   const [sessionStatus, setSessionStatus] = useState<string | null>(null);
+  const [outOfStockAlerts, setOutOfStockAlerts] = useState<string[]>([]);
+  const dismissedAlertsRef = useRef<Set<string>>(new Set());
 
   const [isLocationValid, setIsLocationValid] = useState<boolean | null>(null);
   const [locationMessage, setLocationMessage] = useState<string>("");
@@ -50,7 +53,8 @@ function CartProviderInner({ children }: { children: ReactNode }) {
     if (!isCustomerRoute) return;
 
     // GPS Bypassed for local testing
-    setIsLocationValid(true);
+    if (!isCustomerRoute) return;
+    setIsLocationValid(true); 
     return;
 
     if (!("geolocation" in navigator)) {
@@ -176,6 +180,20 @@ function CartProviderInner({ children }: { children: ReactNode }) {
           setPlacedServes(data.serves);
           setServeCount(data.serves.length);
           setSessionStatus(data.sessionStatus);
+
+          const detectedOutOfStock: string[] = [];
+          (data.serves || []).forEach((serve: PlacedServe) => {
+            (serve.items || []).forEach((item: CartItem) => {
+              if (item.status === "out_of_stock" || item.isOutOfStock) {
+                if (!dismissedAlertsRef.current.has(item.name) && !detectedOutOfStock.includes(item.name)) {
+                  detectedOutOfStock.push(item.name);
+                }
+              }
+            });
+          });
+          if (detectedOutOfStock.length > 0) {
+            setOutOfStockAlerts((prev) => Array.from(new Set([...prev, ...detectedOutOfStock])));
+          }
         }
       } catch (err) {
         console.error("Failed to sync table data", err);
@@ -209,7 +227,16 @@ function CartProviderInner({ children }: { children: ReactNode }) {
   };
 
   // --- 4. CART ACTIONS ---
+  const dismissOutOfStockAlert = (dishName: string) => {
+    dismissedAlertsRef.current.add(dishName);
+    setOutOfStockAlerts((prev) => prev.filter((name) => name !== dishName));
+  };
+
   const addToCart = (dish: Dish) => {
+    if (dish.isAvailable === false) {
+      alert(`Sorry, "${dish.name}" is currently out of stock.`);
+      return;
+    }
     let newCart;
     const existingItem = cart.find((item) => item.id === dish.id);
     if (existingItem) {
@@ -330,8 +357,32 @@ function CartProviderInner({ children }: { children: ReactNode }) {
         placeCurrentOrder,
         cancelSession,
         sessionStatus,
+        outOfStockAlerts,
+        dismissOutOfStockAlert,
       }}
     >
+      {outOfStockAlerts.length > 0 && (
+        <div className="fixed top-4 left-4 right-4 z-50 max-w-lg mx-auto bg-rose-600 text-white p-4 rounded-2xl shadow-xl border border-rose-500 animate-in slide-in-from-top-4 flex items-start justify-between gap-3">
+          <div className="flex items-start gap-2.5">
+            <AlertTriangle className="shrink-0 mt-0.5 text-rose-200" size={18} />
+            <div>
+              <h4 className="text-xs font-black uppercase tracking-wider text-rose-100">
+                Kitchen Stock Alert
+              </h4>
+              <p className="text-xs font-bold mt-0.5 leading-snug">
+                The kitchen marked <span className="underline font-black">{outOfStockAlerts.join(", ")}</span> as out of stock. It has been removed from your bill. A waiter will assist you shortly.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => outOfStockAlerts.forEach(dismissOutOfStockAlert)}
+            className="p-1 rounded-lg hover:bg-rose-700 text-rose-200 hover:text-white transition"
+            title="Dismiss"
+          >
+            <X size={16} />
+          </button>
+        </div>
+      )}
       <RouteGuard
         isCustomerRoute={isCustomerRoute}
         isLocationValid={isLocationValid}

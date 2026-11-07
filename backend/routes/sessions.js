@@ -97,14 +97,18 @@ router.get("/:sessionId/sync", async (req, res) => {
         const formattedItems = serve.order_items
           .filter(item => item !== null) 
           .map(item => {
-            serveTotal += Number(item.price) * item.quantity;
+            const isOutOfStock = item.status === "out_of_stock" || (item.notes && item.notes.includes("[OUT OF STOCK"));
+            if (!isOutOfStock) {
+              serveTotal += Number(item.price) * item.quantity;
+            }
             return {
               id: item.menu_item_id, 
               name: item.menu_items?.name || "Unknown Item",
               price: item.price,
               quantity: item.quantity,
               notes: item.notes,
-              status: item.status 
+              status: isOutOfStock ? "out_of_stock" : item.status,
+              isOutOfStock: isOutOfStock
             };
           });
 

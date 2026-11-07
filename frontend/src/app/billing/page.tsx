@@ -1,41 +1,65 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { 
-  IndianRupee, CreditCard, Smartphone, CheckCircle2, 
-  AlertCircle, X, ReceiptText, UtensilsCrossed,
-  Plus, Minus, Trash2, Tag, Percent
+import {
+  IndianRupee,
+  CreditCard,
+  Smartphone,
+  CheckCircle2,
+  AlertCircle,
+  X,
+  ReceiptText,
+  UtensilsCrossed,
+  Plus,
+  Minus,
+  Trash2,
+  Tag,
+  Percent,
+  Search,
+  Users,
+  LogOut,
+  ShoppingBag,
+  Clock,
+  Sparkles,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
-// --- INTERFACES ---
 interface OrderItem {
   name: string;
   quantity: number;
-  price: number; 
+  price: number;
+  chefName?: string | null;
+  chefs?: string[];
 }
 
 interface TableData {
   id: string;
   tableNumber: number;
   status: "Available" | "Occupied" | "Billed";
-  paymentMethod?: "cash" | "card" | "upi" | null; 
+  paymentMethod?: "cash" | "card" | "upi" | null;
   sessionId: string | null;
   orderId: string | null;
   itemTotal: number;
-  items: OrderItem[]; 
+  waiterName?: string | null;
+  chefs?: string[];
+  items: OrderItem[];
 }
 
 interface CheckoutItem {
   name: string;
   quantity: number;
   unitPrice: number;
+  chefName?: string | null;
+  chefs?: string[];
 }
 
 export default function BillingDashboard() {
   const [tables, setTables] = useState<TableData[]>([]);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
+  const [filterType, setFilterType] = useState<"all" | "billed" | "occupied" | "parcels">("all");
+  const [searchTable, setSearchTable] = useState("");
 
   // Modal & Checkout State
   const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
@@ -46,7 +70,7 @@ export default function BillingDashboard() {
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
   const router = useRouter();
 
-  const selectedTable = tables.find(t => t.id === selectedTableId) || null;
+  const selectedTable = tables.find((t) => t.id === selectedTableId) || null;
 
   // Protect the route
   useEffect(() => {
@@ -83,46 +107,46 @@ export default function BillingDashboard() {
     return () => clearInterval(interval);
   }, []);
 
-  // Initialize checkout items when opening the modal
   const openModal = (table: TableData) => {
     setSelectedTableId(table.id);
     setDiscountValue(0);
     setDiscountType("percent");
-    
+
     setCheckoutItems(
-      table.items.map(item => ({
+      table.items.map((item) => ({
         name: item.name,
         quantity: item.quantity,
-        unitPrice: item.quantity > 0 ? item.price / item.quantity : 0
+        unitPrice: item.quantity > 0 ? item.price / item.quantity : 0,
+        chefName: item.chefName || (item.chefs && item.chefs[0]) || null,
+        chefs: item.chefs || [],
       }))
     );
   };
 
-  // --- EDITING ACTIONS ---
   const updateQuantity = (index: number, delta: number) => {
-    setCheckoutItems(prev => prev.map((item, i) => 
-      i === index 
-        ? { ...item, quantity: Math.max(1, item.quantity + delta) } 
-        : item
-    ));
+    setCheckoutItems((prev) =>
+      prev.map((item, i) =>
+        i === index ? { ...item, quantity: Math.max(1, item.quantity + delta) } : item
+      )
+    );
   };
 
   const removeCheckoutItem = (index: number) => {
-    setCheckoutItems(prev => prev.filter((_, i) => i !== index));
+    setCheckoutItems((prev) => prev.filter((_, i) => i !== index));
   };
 
-  // --- CALCULATIONS ---
-  const subtotal = checkoutItems.reduce((acc, item) => acc + (item.unitPrice * item.quantity), 0);
-  const discountAmount = discountType === "percent" 
-    ? (subtotal * discountValue) / 100 
-    : discountValue;
-  
+  // Calculations
+  const subtotal = checkoutItems.reduce((acc, item) => acc + item.unitPrice * item.quantity, 0);
+  const discountAmount =
+    discountType === "percent" ? (subtotal * discountValue) / 100 : discountValue;
+
   const discountedSubtotal = Math.max(0, subtotal - discountAmount);
   const gst = Math.round(discountedSubtotal * 0.05);
-  const platformFee = 15;
-  const grandTotal = checkoutItems.length > 0 ? Math.round(discountedSubtotal + gst + platformFee) : 0;
+  const platformFee = checkoutItems.length > 0 ? 15 : 0;
+  const grandTotal =
+    checkoutItems.length > 0 ? Math.round(discountedSubtotal + gst + platformFee) : 0;
 
-  // --- PAYMENT LOGIC ---
+  // Process checkout
   const handlePayment = async (paymentMethod: "cash" | "card" | "upi") => {
     if (!selectedTable || !selectedTable.orderId) return;
     setProcessing(true);
@@ -135,9 +159,9 @@ export default function BillingDashboard() {
           orderId: selectedTable.orderId,
           sessionId: selectedTable.sessionId,
           tableNumber: selectedTable.tableNumber,
-          paymentMethod: paymentMethod, 
-          finalAmount: grandTotal 
-        })
+          paymentMethod: paymentMethod,
+          finalAmount: grandTotal,
+        }),
       });
 
       if (res.ok) {
@@ -153,11 +177,11 @@ export default function BillingDashboard() {
     }
   };
 
-  // --- CLEAR EMPTY TABLE LOGIC ---
+  // Clear empty table
   const handleCloseSession = async () => {
     if (!selectedTable || !selectedTable.sessionId) return;
     const confirmClose = window.confirm(
-      `Are you sure you want to clear Table ${selectedTable.tableNumber}? This will cancel their session.`
+      `Clear Table ${selectedTable.tableNumber}? This will cancel the open session.`
     );
     if (!confirmClose) return;
 
@@ -177,279 +201,511 @@ export default function BillingDashboard() {
     }
   };
 
-  if (loading) return (
-    <div className="min-h-screen bg-[#F8F9FB] flex items-center justify-center">
-      <div className="flex flex-col items-center gap-3">
-        <div className="w-6 h-6 border-4 border-orange-500 border-t-transparent rounded-full animate-spin"></div>
-        <p className="text-gray-500 font-bold uppercase tracking-widest text-sm">Loading Desk...</p>
+  const handleLogout = () => {
+    localStorage.clear();
+    router.push("/login");
+  };
+
+  // Stats calculations
+  const totalOccupied = tables.filter((t) => t.status === "Occupied").length;
+  const totalBilled = tables.filter((t) => t.status === "Billed").length;
+  const totalAvailable = tables.filter((t) => t.status === "Available").length;
+  const pendingCollection = tables.reduce((acc, t) => acc + (t.itemTotal || 0), 0);
+
+  // Filtering
+  const filteredTables = tables.filter((table) => {
+    const isParcel = table.tableNumber > 100;
+    const matchSearch =
+      searchTable === "" ||
+      table.tableNumber.toString().includes(searchTable) ||
+      (isParcel && (table.tableNumber - 100).toString().includes(searchTable));
+
+    if (!matchSearch) return false;
+    if (filterType === "billed") return table.status === "Billed";
+    if (filterType === "occupied") return table.status === "Occupied";
+    if (filterType === "parcels") return isParcel;
+    return true;
+  });
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#faf9f6] flex flex-col items-center justify-center font-sans">
+        <div className="w-12 h-12 border-3 border-orange-500 border-t-transparent rounded-full animate-spin mb-3" />
+        <p className="text-stone-500 font-bold text-xs uppercase tracking-widest">
+          Initializing Cashier Desk...
+        </p>
       </div>
-    </div>
-  );
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-[#F8F9FB] text-gray-900 p-4 sm:p-6 md:p-8 font-sans">
+    <div className="min-h-screen bg-[#faf9f6] text-stone-900 p-4 sm:p-6 lg:p-8 font-sans selection:bg-orange-500/20">
       
-      <header className="mb-6 sm:mb-8">
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 md:gap-6">
-          <div className="flex items-center gap-3 sm:gap-4">
-            <div className="bg-orange-100 p-2.5 sm:p-3.5 rounded-2xl shadow-sm border border-orange-200/50 shrink-0">
-              <ReceiptText className="text-orange-600 w-6 h-6 sm:w-8 sm:h-8" />
-            </div>
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-gray-900 leading-none mb-1">
-                Billing Desk
-              </h1>
-              <p className="text-gray-500 font-medium text-xs sm:text-sm">
-                Manage table sessions, apply discounts, and process payments.
-              </p>
-            </div>
+      {/* Top Header */}
+      <header className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-stone-200/80">
+        <div className="flex items-center gap-3.5">
+          <div className="w-12 h-12 rounded-2xl bg-orange-100 text-orange-600 flex items-center justify-center shadow-xs">
+            <ReceiptText size={24} />
           </div>
-          
-          <div className="flex gap-4 sm:gap-6 text-[10px] sm:text-xs font-bold bg-white px-5 sm:px-6 py-3 sm:py-3.5 rounded-full shadow-sm border border-gray-200 overflow-x-auto no-scrollbar whitespace-nowrap w-full md:w-auto">
-            <div className="flex items-center gap-2 text-gray-600">
-              <span className="w-2.5 h-2.5 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]"></span> Available
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-2xl font-black text-stone-900 leading-none">Billing Desk</h1>
+              <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                POS Online
+              </span>
             </div>
-            <div className="flex items-center gap-2 text-gray-600">
-              <span className="w-2.5 h-2.5 rounded-full bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.5)]"></span> Occupied
-            </div>
-            <div className="flex items-center gap-2 text-gray-900">
-              <span className="w-2.5 h-2.5 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)] animate-pulse"></span> Bill Requested
-            </div>
+            <p className="text-stone-500 text-xs font-medium mt-1">
+              Live table settlement, discount management, and payment reconciliation.
+            </p>
           </div>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <Link
+            href="/management"
+            className="flex items-center gap-1.5 px-4 py-2 bg-white rounded-xl border border-stone-200 text-xs font-black text-stone-700 hover:bg-stone-50 transition shadow-2xs"
+          >
+            <Tag size={15} />
+            <span>Management Portal</span>
+          </Link>
+
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-1.5 px-3 py-2 bg-stone-100 hover:bg-rose-50 text-stone-600 hover:text-rose-600 rounded-xl text-xs font-bold transition"
+            title="Sign out"
+          >
+            <LogOut size={16} />
+            <span className="hidden sm:inline">Logout</span>
+          </button>
         </div>
       </header>
 
-      {/* Table Grid */}
-      {tables.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 sm:py-32 text-gray-400">
-           <ReceiptText size={56} className="mb-4 opacity-20" />
-           <h2 className="text-xl sm:text-2xl font-black text-gray-600">No Tables Configured</h2>
+      {/* KPI Stats Bar */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
+        
+        <div className="bg-white p-4 rounded-2xl border border-stone-200/80 shadow-2xs">
+          <span className="text-[10px] font-black uppercase tracking-widest text-stone-400 block mb-1">
+            Billed (Awaiting Payment)
+          </span>
+          <div className="flex items-baseline justify-between">
+            <span className="text-2xl sm:text-3xl font-black text-rose-600">
+              {totalBilled}
+            </span>
+            {totalBilled > 0 && (
+              <span className="text-[10px] font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full animate-pulse">
+                Action Required
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div className="bg-white p-4 rounded-2xl border border-stone-200/80 shadow-2xs">
+          <span className="text-[10px] font-black uppercase tracking-widest text-stone-400 block mb-1">
+            Active Occupied Tables
+          </span>
+          <span className="text-2xl sm:text-3xl font-black text-amber-600">
+            {totalOccupied}
+          </span>
+        </div>
+
+        <div className="bg-white p-4 rounded-2xl border border-stone-200/80 shadow-2xs">
+          <span className="text-[10px] font-black uppercase tracking-widest text-stone-400 block mb-1">
+            Vacant Tables
+          </span>
+          <span className="text-2xl sm:text-3xl font-black text-stone-400">
+            {totalAvailable}
+          </span>
+        </div>
+
+        <div className="bg-white p-4 rounded-2xl border border-stone-200/80 shadow-2xs">
+          <span className="text-[10px] font-black uppercase tracking-widest text-stone-400 block mb-1">
+            Active Orders Value
+          </span>
+          <span className="text-2xl sm:text-3xl font-black text-stone-900">
+            ₹{pendingCollection}
+          </span>
+        </div>
+
+      </div>
+
+      {/* Filter and Search Bar */}
+      <div className="flex flex-col sm:flex-row justify-between items-center gap-3 mb-6 bg-white p-3 rounded-2xl border border-stone-200/80 shadow-2xs">
+        
+        <div className="flex gap-1.5 overflow-x-auto w-full sm:w-auto no-scrollbar">
+          {[
+            { id: "all", label: "All Tables" },
+            { id: "billed", label: `Billed (${totalBilled})` },
+            { id: "occupied", label: "Occupied" },
+            { id: "parcels", label: "Takeaway Parcels" },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setFilterType(tab.id as any)}
+              className={`px-3.5 py-2 rounded-xl text-xs font-black whitespace-nowrap transition cursor-pointer ${
+                filterType === tab.id
+                  ? "bg-stone-900 text-white shadow-xs"
+                  : "bg-stone-50 text-stone-600 hover:bg-stone-100"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="relative w-full sm:w-64">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+          <input
+            type="text"
+            placeholder="Search table or token #..."
+            value={searchTable}
+            onChange={(e) => setSearchTable(e.target.value)}
+            className="w-full pl-9 pr-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-bold outline-none focus:bg-white focus:border-orange-500 transition"
+          />
+        </div>
+      </div>
+
+      {/* Tables Grid */}
+      {filteredTables.length === 0 ? (
+        <div className="py-20 text-center bg-white rounded-3xl border border-stone-200/80 p-8">
+          <p className="text-sm font-bold text-stone-400">No tables match your selected filter.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4 sm:gap-6">
-          {tables.map((table) => {
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 sm:gap-4">
+          {filteredTables.map((table) => {
             const isParcel = table.tableNumber > 100;
+            const isAvailable = table.status === "Available";
+            const isBilled = table.status === "Billed";
+            const isOccupied = table.status === "Occupied";
 
             return (
               <button
                 key={table.id}
-                onClick={() => table.status !== "Available" && openModal(table)}
-                disabled={table.status === "Available"}
-                className={`relative p-5 sm:p-6 rounded-4xl shadow-sm border-2 transition-all duration-200 flex flex-col items-center justify-center text-center aspect-square sm:aspect-auto sm:h-48
-                  ${table.status === "Available" ? "bg-white border-gray-100 opacity-60 cursor-not-allowed hover:bg-gray-50" : ""}
-                  ${table.status === "Occupied" ? "bg-orange-50/50 border-orange-200 hover:bg-orange-100 hover:shadow-md cursor-pointer active:scale-95" : ""}
-                  ${table.status === "Billed" ? "bg-red-50 border-red-500 hover:bg-red-100 cursor-pointer active:scale-95 shadow-[0_8px_30px_rgba(239,68,68,0.2)]" : ""}
-                `}
+                onClick={() => !isAvailable && openModal(table)}
+                disabled={isAvailable}
+                className={`relative p-5 rounded-3xl border-2 transition-all duration-200 flex flex-col items-center justify-between min-h-44 text-center cursor-pointer ${
+                  isAvailable
+                    ? "bg-white border-stone-200/60 opacity-50 cursor-not-allowed"
+                    : isBilled
+                    ? "bg-rose-50/70 border-rose-500 shadow-lg shadow-rose-500/10 active:scale-95 hover:bg-rose-50"
+                    : "bg-amber-50/50 border-amber-300 hover:border-amber-400 active:scale-95 hover:bg-amber-50 shadow-2xs"
+                }`}
               >
-                {table.status === "Billed" && table.paymentMethod && (
-                  <div className="absolute top-3 left-3 sm:top-4 sm:left-4 flex items-center gap-1 bg-red-100 text-red-700 px-2 py-1 rounded-lg text-[9px] sm:text-[10px] font-black uppercase tracking-wider">
-                    {table.paymentMethod === 'cash' && <IndianRupee size={12}/>}
-                    {table.paymentMethod === 'card' && <CreditCard size={12}/>}
-                    {table.paymentMethod === 'upi' && <Smartphone size={12}/>}
-                    <span className="hidden sm:inline">{table.paymentMethod}</span>
+                {/* Status Badges */}
+                {isBilled && (
+                  <div className="absolute top-3 left-3 bg-rose-600 text-white text-[9px] font-black uppercase px-2 py-0.5 rounded-md flex items-center gap-1 shadow-xs animate-pulse">
+                    <AlertCircle size={10} />
+                    <span>{table.paymentMethod || "Billed"}</span>
                   </div>
                 )}
 
-                {table.status === "Billed" && (
-                  <AlertCircle className="absolute top-3 right-3 sm:top-4 sm:right-4 text-red-500 animate-pulse" size={18} />
+                {isParcel && (
+                  <span className="absolute top-3 right-3 text-[9px] font-black uppercase text-purple-700 bg-purple-100 px-1.5 py-0.5 rounded-md">
+                    Takeaway
+                  </span>
                 )}
-                
-                <h2 className={`text-3xl sm:text-4xl font-black mb-1 sm:mb-2 ${table.status === "Available" ? "text-gray-300" : "text-gray-900"}`}>
-                  {isParcel ? `P-${table.tableNumber - 100}` : table.tableNumber}
-                </h2>
-                
-                <span className={`text-[9px] sm:text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-md
-                  ${table.status === "Available" ? "bg-gray-100 text-gray-400" : ""}
-                  ${table.status === "Occupied" ? "bg-orange-200 text-orange-700" : ""}
-                  ${table.status === "Billed" ? "bg-red-500 text-white" : ""}
-                `}>
-                  {table.status}
-                </span>
 
-                {table.status !== "Available" && (
-                  <p className="text-xs sm:text-sm font-bold text-gray-700 mt-2 sm:mt-3 bg-white/60 px-3 py-1 rounded-lg shadow-sm border border-gray-100/50">
-                    ₹{table.itemTotal}
-                  </p>
-                )}
+                <div className="my-auto">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-stone-400 block mb-0.5">
+                    {isParcel ? "Parcel Token" : "Table"}
+                  </span>
+                  <h2 className="text-3xl sm:text-4xl font-black text-stone-900 leading-none">
+                    {isParcel ? table.tableNumber - 100 : table.tableNumber}
+                  </h2>
+                  {table.waiterName && (
+                    <span className="inline-block mt-1.5 text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200/80 px-2 py-0.5 rounded-md truncate max-w-[120px]">
+                      🤵 {table.waiterName}
+                    </span>
+                  )}
+                </div>
+
+                <div className="w-full pt-2 border-t border-stone-200/50 flex justify-between items-center text-xs">
+                  <span
+                    className={`text-[10px] font-black uppercase ${
+                      isAvailable
+                        ? "text-stone-400"
+                        : isBilled
+                        ? "text-rose-600 font-extrabold"
+                        : "text-amber-700"
+                    }`}
+                  >
+                    {table.status}
+                  </span>
+                  {!isAvailable && (
+                    <span className="font-black text-stone-900">
+                      ₹{table.itemTotal}
+                    </span>
+                  )}
+                </div>
               </button>
-            )
+            );
           })}
         </div>
       )}
 
-      {/* Checkout Modal */}
+      {/* Checkout Drawer / Modal */}
       {selectedTable && (
-        <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-4 transition-opacity duration-300">
-          <div className="bg-white rounded-[2.5rem] w-full max-w-md overflow-hidden shadow-2xl animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
-            <div className="bg-gray-50 px-6 py-5 border-b border-gray-100 flex justify-between items-center shrink-0">
+        <div className="fixed inset-0 bg-stone-950/60 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4 transition-opacity">
+          <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-lg max-h-[92vh] flex flex-col shadow-2xl border border-stone-200 animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-200">
+            
+            {/* Modal Header */}
+            <div className="p-5 border-b border-stone-200 flex justify-between items-center bg-[#faf9f6] rounded-t-3xl">
               <div>
-                <h3 className="text-2xl font-black text-gray-900 leading-tight">
-                  {selectedTable.tableNumber > 100 ? `Parcel #${selectedTable.tableNumber - 100}` : `Table ${selectedTable.tableNumber}`}
+                <h3 className="text-xl font-black text-stone-900 leading-tight">
+                  {selectedTable.tableNumber > 100
+                    ? `Parcel Token #${selectedTable.tableNumber - 100}`
+                    : `Table #${selectedTable.tableNumber} Settlement`}
                 </h3>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mt-1">Checkout & Payment</p>
+                <div className="flex flex-wrap items-center gap-2 mt-1">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-stone-400">
+                    POS Payment Terminal
+                  </p>
+                  {selectedTable.waiterName && (
+                    <span className="text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full flex items-center gap-1">
+                      🤵 Waiter: {selectedTable.waiterName}
+                    </span>
+                  )}
+                  {selectedTable.chefs && selectedTable.chefs.length > 0 && (
+                    <span className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full flex items-center gap-1">
+                      👨‍🍳 Chef(s): {selectedTable.chefs.join(", ")}
+                    </span>
+                  )}
+                </div>
               </div>
-              <button onClick={() => setSelectedTableId(null)} className="p-2 bg-white rounded-full hover:bg-gray-200 transition-colors shadow-sm border border-gray-100">
-                <X size={20} className="text-gray-500" />
+              <button
+                onClick={() => setSelectedTableId(null)}
+                className="p-2 rounded-full hover:bg-stone-200 text-stone-500 transition"
+              >
+                <X size={20} />
               </button>
             </div>
 
-            <div className="p-6 overflow-y-auto no-scrollbar flex-1">
+            {/* Modal Scrollable Body */}
+            <div className="p-5 overflow-y-auto flex-1 space-y-5">
               
               {checkoutItems.length === 0 ? (
-                // 🔥 NEW UI: Switch to Clear Empty Table View if there are no items
-                <div className="py-12 flex flex-col items-center justify-center">
-                  <ReceiptText size={48} className="text-gray-300 mb-4" />
-                  <p className="text-center text-gray-400 font-bold uppercase tracking-wider text-xs mb-8">No active items on this table</p>
-                  
-                  <button 
+                <div className="py-12 text-center">
+                  <ReceiptText size={44} className="mx-auto text-stone-300 mb-3" />
+                  <p className="text-xs font-bold text-stone-400 uppercase tracking-wider mb-6">
+                    No active items ordered on this table
+                  </p>
+                  <button
                     onClick={handleCloseSession}
                     disabled={processing}
-                    className="w-full flex items-center justify-center gap-2 py-4 text-red-600 bg-red-50 hover:bg-red-100 font-bold rounded-2xl transition-colors active:scale-[0.98] disabled:opacity-50"
+                    className="w-full bg-rose-50 hover:bg-rose-100 text-rose-700 py-3.5 rounded-2xl text-xs font-black uppercase tracking-wider transition active:scale-98 flex items-center justify-center gap-2 cursor-pointer"
                   >
-                    <Trash2 size={18} /> Clear Empty Table (Cancel Session)
+                    <Trash2 size={16} />
+                    <span>Cancel Empty Session & Free Table</span>
                   </button>
                 </div>
               ) : (
-                // NORMAL CHECKOUT VIEW
                 <>
-                  {/* EDITABLE ORDER SUMMARY SECTION */}
-                  <div className="bg-[#F8F9FB] rounded-3xl p-5 mb-6 border border-gray-100">
-                    <div className="flex items-center gap-2 mb-4 pb-3 border-b border-dashed border-gray-200 text-gray-500">
-                       <UtensilsCrossed size={16} />
-                       <h4 className="text-[10px] font-bold uppercase tracking-widest">Editable Order Summary</h4>
+                  {/* Editable Items List */}
+                  <div className="bg-[#faf9f6] rounded-2xl p-4 border border-stone-200/80">
+                    <div className="flex justify-between items-center mb-3 pb-2 border-b border-stone-200 text-stone-500 text-xs font-bold uppercase tracking-wider">
+                      <span className="flex items-center gap-1.5">
+                        <UtensilsCrossed size={14} /> Item Details
+                      </span>
+                      <span>Qty & Subtotal</span>
                     </div>
-                    
-                    <div className="mb-4 space-y-3 max-h-48 overflow-y-auto pr-1 no-scrollbar">
+
+                    <div className="space-y-2.5 max-h-48 overflow-y-auto pr-1">
                       {checkoutItems.map((item, idx) => (
-                        <div key={idx} className="flex justify-between items-center bg-white p-3 rounded-2xl border border-stone-100 shadow-sm">
-                          <div className="flex-1 pr-2">
-                            <span className="font-bold text-gray-800 leading-tight text-sm block">{item.name}</span>
-                            <span className="text-[10px] font-bold text-gray-400">₹{item.unitPrice} each</span>
+                        <div
+                          key={idx}
+                          className="bg-white p-3 rounded-xl border border-stone-200/60 shadow-2xs flex justify-between items-center gap-2"
+                        >
+                          <div className="flex-1">
+                            <span className="text-xs font-black text-stone-900 block leading-tight">
+                              {item.name}
+                            </span>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <span className="text-[10px] text-stone-400 font-bold">
+                                ₹{item.unitPrice} each
+                              </span>
+                              {(item.chefName || (item.chefs && item.chefs.length > 0)) && (
+                                <span className="text-[9px] font-semibold text-amber-700 bg-amber-50 border border-amber-200/60 px-1.5 py-0.2 rounded">
+                                  👨‍🍳 {item.chefName || item.chefs?.join(", ")}
+                                </span>
+                              )}
+                            </div>
                           </div>
-                          
-                          <div className="flex items-center gap-3">
-                            {/* Item Controls */}
-                            <div className="flex items-center bg-gray-50 rounded-lg border border-gray-200 p-0.5">
-                              <button onClick={() => updateQuantity(idx, -1)} className="p-1 hover:bg-white rounded-md text-gray-600">
+
+                          <div className="flex items-center gap-2.5">
+                            <div className="flex items-center bg-stone-100 rounded-lg p-0.5 border border-stone-200">
+                              <button
+                                onClick={() => updateQuantity(idx, -1)}
+                                className="p-1 hover:bg-white rounded text-stone-600"
+                              >
                                 <Minus size={12} />
                               </button>
-                              <span className="w-6 text-center font-black text-sm">{item.quantity}</span>
-                              <button onClick={() => updateQuantity(idx, 1)} className="p-1 hover:bg-white rounded-md text-gray-600">
+                              <span className="w-5 text-center font-black text-xs text-stone-900">
+                                {item.quantity}
+                              </span>
+                              <button
+                                onClick={() => updateQuantity(idx, 1)}
+                                className="p-1 hover:bg-white rounded text-stone-600"
+                              >
                                 <Plus size={12} />
                               </button>
                             </div>
-                            
-                            <div className="flex flex-col items-end w-12">
-                              <span className="font-black text-gray-900 mb-1">₹{item.unitPrice * item.quantity}</span>
-                              <button onClick={() => removeCheckoutItem(idx)} className="text-red-400 hover:text-red-600 transition-colors">
-                                <Trash2 size={14} />
-                              </button>
-                            </div>
+
+                            <span className="text-xs font-black text-stone-900 w-12 text-right">
+                              ₹{item.unitPrice * item.quantity}
+                            </span>
+
+                            <button
+                              onClick={() => removeCheckoutItem(idx)}
+                              className="text-stone-300 hover:text-rose-600 p-1 transition"
+                            >
+                              <Trash2 size={14} />
+                            </button>
                           </div>
                         </div>
                       ))}
                     </div>
+                  </div>
 
-                    {/* --- DISCOUNT CONTROLS --- */}
-                    <div className="bg-white p-3 rounded-2xl border border-gray-200 shadow-sm mb-4 mt-2">
-                      <div className="flex items-center gap-2 mb-2 text-gray-500">
-                        <Tag size={14} />
-                        <span className="text-[10px] font-bold uppercase tracking-widest">Apply Discount</span>
-                      </div>
-                      <div className="flex gap-2 h-10">
-                        <input 
-                          type="number" 
-                          min="0"
-                          value={discountValue || ""}
-                          onChange={(e) => setDiscountValue(Number(e.target.value) || 0)}
-                          placeholder="0"
-                          className="flex-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold text-gray-900 outline-none focus:border-orange-500 w-full"
-                        />
-                        <button 
-                          onClick={() => setDiscountType("percent")}
-                          className={`px-3 rounded-lg font-bold transition-colors ${discountType === 'percent' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-500'}`}
-                        >
-                          <Percent size={14} />
-                        </button>
-                        <button 
-                          onClick={() => setDiscountType("flat")}
-                          className={`px-3 rounded-lg font-bold transition-colors ${discountType === 'flat' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-500'}`}
-                        >
-                          <IndianRupee size={14} />
-                        </button>
-                      </div>
-                    </div>
+                  {/* Discount Controls */}
+                  <div className="bg-[#faf9f6] p-4 rounded-2xl border border-stone-200/80">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-stone-500 block mb-2 flex items-center gap-1.5">
+                      <Tag size={13} />
+                      <span>Promotional Discount</span>
+                    </span>
 
-                    {/* Subtotals & Math */}
-                    <div className="pt-4 border-t border-dashed border-gray-200 space-y-2">
-                      <div className="flex justify-between text-xs font-medium text-gray-500">
-                        <span>Subtotal</span><span>₹{subtotal}</span>
-                      </div>
-                      {discountAmount > 0 && (
-                        <div className="flex justify-between text-xs font-bold text-green-600">
-                          <span>Discount</span><span>- ₹{discountAmount.toFixed(2)}</span>
-                        </div>
-                      )}
-                      <div className="flex justify-between text-xs font-medium text-gray-500">
-                        <span>GST (5%)</span><span>₹{gst}</span>
-                      </div>
-                      <div className="flex justify-between text-xs font-medium text-gray-500 pb-3 border-b border-dashed border-gray-200">
-                        <span>Platform Fee</span><span>₹15</span>
-                      </div>
-                      <div className="flex justify-between items-center pt-1">
-                        <span className="text-lg font-black text-gray-900">Final Amount</span>
-                        <span className="text-3xl font-black text-green-600">₹{grandTotal}</span>
-                      </div>
+                    <div className="flex gap-2">
+                      <input
+                        type="number"
+                        min="0"
+                        placeholder="Discount value"
+                        value={discountValue || ""}
+                        onChange={(e) => setDiscountValue(Number(e.target.value) || 0)}
+                        className="flex-1 bg-white border border-stone-200 rounded-xl px-3 py-2 text-xs font-black text-stone-900 outline-none focus:border-orange-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setDiscountType("percent")}
+                        className={`px-3 py-2 rounded-xl text-xs font-black transition ${
+                          discountType === "percent"
+                            ? "bg-stone-900 text-white"
+                            : "bg-white text-stone-600 border border-stone-200"
+                        }`}
+                      >
+                        %
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDiscountType("flat")}
+                        className={`px-3 py-2 rounded-xl text-xs font-black transition ${
+                          discountType === "flat"
+                            ? "bg-stone-900 text-white"
+                            : "bg-white text-stone-600 border border-stone-200"
+                        }`}
+                      >
+                        ₹
+                      </button>
                     </div>
                   </div>
 
-                  <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3 ml-1">Select Payment Method to Close</h4>
-                  <div className="grid grid-cols-3 gap-3">
-                    <button 
-                      onClick={() => handlePayment("cash")} disabled={processing || grandTotal === 0}
-                      className={`flex flex-col items-center justify-center p-4 border-2 rounded-2xl transition-all active:scale-95 disabled:opacity-50
-                        ${selectedTable.paymentMethod === 'cash' ? 'border-green-500 bg-green-50 shadow-md ring-4 ring-green-500/20' : 'bg-white border-gray-100 hover:border-green-500 hover:bg-green-50'}`}
-                    >
-                      <IndianRupee size={24} className={`mb-2 ${selectedTable.paymentMethod === 'cash' ? 'text-green-600' : 'text-gray-500'}`} />
-                      <span className="text-sm font-bold text-gray-900">Cash</span>
-                    </button>
-                    
-                    <button 
-                      onClick={() => handlePayment("card")} disabled={processing || grandTotal === 0}
-                      className={`flex flex-col items-center justify-center p-4 border-2 rounded-2xl transition-all active:scale-95 disabled:opacity-50
-                        ${selectedTable.paymentMethod === 'card' ? 'border-blue-500 bg-blue-50 shadow-md ring-4 ring-blue-500/20' : 'bg-white border-gray-100 hover:border-blue-500 hover:bg-blue-50'}`}
-                    >
-                      <CreditCard size={24} className={`mb-2 ${selectedTable.paymentMethod === 'card' ? 'text-blue-600' : 'text-gray-500'}`} />
-                      <span className="text-sm font-bold text-gray-900">Card</span>
-                    </button>
+                  {/* Math Breakdown */}
+                  <div className="space-y-2 text-xs font-medium text-stone-600 bg-white p-4 rounded-2xl border border-stone-200/80">
+                    <div className="flex justify-between">
+                      <span>Subtotal</span>
+                      <span className="font-bold">₹{subtotal}</span>
+                    </div>
 
-                    <button 
-                      onClick={() => handlePayment("upi")} disabled={processing || grandTotal === 0}
-                      className={`flex flex-col items-center justify-center p-4 border-2 rounded-2xl transition-all active:scale-95 disabled:opacity-50
-                        ${selectedTable.paymentMethod === 'upi' ? 'border-purple-500 bg-purple-50 shadow-md ring-4 ring-purple-500/20' : 'bg-white border-gray-100 hover:border-purple-500 hover:bg-purple-50'}`}
-                    >
-                      <Smartphone size={24} className={`mb-2 ${selectedTable.paymentMethod === 'upi' ? 'text-purple-600' : 'text-gray-500'}`} />
-                      <span className="text-sm font-bold text-gray-900">UPI</span>
-                    </button>
+                    {discountAmount > 0 && (
+                      <div className="flex justify-between text-emerald-600 font-bold">
+                        <span>Discount Deducted</span>
+                        <span>- ₹{discountAmount.toFixed(2)}</span>
+                      </div>
+                    )}
+
+                    <div className="flex justify-between">
+                      <span>GST (5%)</span>
+                      <span className="font-bold">₹{gst}</span>
+                    </div>
+
+                    <div className="flex justify-between pb-2 border-b border-dashed border-stone-200">
+                      <span>Platform Fee</span>
+                      <span className="font-bold">₹{platformFee}</span>
+                    </div>
+
+                    <div className="flex justify-between items-center pt-1 text-base">
+                      <span className="font-black text-stone-900">Total Settlement</span>
+                      <span className="text-2xl font-black text-emerald-600">
+                        ₹{grandTotal}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Payment Method Action Buttons */}
+                  <div>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-stone-400 block mb-2 text-center">
+                      Select Tender to Close & Free Table
+                    </span>
+
+                    <div className="grid grid-cols-3 gap-2.5">
+                      
+                      <button
+                        onClick={() => handlePayment("cash")}
+                        disabled={processing || grandTotal === 0}
+                        className={`p-3.5 rounded-2xl border-2 flex flex-col items-center justify-center transition active:scale-95 disabled:opacity-50 cursor-pointer ${
+                          selectedTable.paymentMethod === "cash"
+                            ? "border-emerald-500 bg-emerald-50 text-emerald-800"
+                            : "border-stone-200 hover:border-emerald-500 bg-white text-stone-700"
+                        }`}
+                      >
+                        <IndianRupee size={22} className="text-emerald-600 mb-1" />
+                        <span className="text-xs font-black">Cash</span>
+                      </button>
+
+                      <button
+                        onClick={() => handlePayment("card")}
+                        disabled={processing || grandTotal === 0}
+                        className={`p-3.5 rounded-2xl border-2 flex flex-col items-center justify-center transition active:scale-95 disabled:opacity-50 cursor-pointer ${
+                          selectedTable.paymentMethod === "card"
+                            ? "border-blue-500 bg-blue-50 text-blue-800"
+                            : "border-stone-200 hover:border-blue-500 bg-white text-stone-700"
+                        }`}
+                      >
+                        <CreditCard size={22} className="text-blue-600 mb-1" />
+                        <span className="text-xs font-black">Card</span>
+                      </button>
+
+                      <button
+                        onClick={() => handlePayment("upi")}
+                        disabled={processing || grandTotal === 0}
+                        className={`p-3.5 rounded-2xl border-2 flex flex-col items-center justify-center transition active:scale-95 disabled:opacity-50 cursor-pointer ${
+                          selectedTable.paymentMethod === "upi"
+                            ? "border-purple-500 bg-purple-50 text-purple-800"
+                            : "border-stone-200 hover:border-purple-500 bg-white text-stone-700"
+                        }`}
+                      >
+                        <Smartphone size={22} className="text-purple-600 mb-1" />
+                        <span className="text-xs font-black">UPI</span>
+                      </button>
+
+                    </div>
                   </div>
                 </>
               )}
 
-              {/* CANCEL BUTTON */}
-              <div className="mt-6 space-y-3">
-                <button 
-                  onClick={() => setSelectedTableId(null)} 
-                  disabled={processing}
-                  className="w-full py-3.5 text-stone-400 font-bold hover:text-stone-600 hover:bg-stone-50 rounded-2xl transition-colors"
-                >
-                  Cancel
-                </button>
-              </div>
-
             </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-stone-200 bg-[#faf9f6] flex justify-end">
+              <button
+                onClick={() => setSelectedTableId(null)}
+                className="w-full py-2.5 text-stone-500 hover:text-stone-800 font-bold text-xs"
+              >
+                Close Window
+              </button>
+            </div>
+
           </div>
         </div>
       )}
+
     </div>
   );
 }

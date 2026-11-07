@@ -3,14 +3,14 @@ import supabase from "../supabase.js";
 
 const router = express.Router();
 
-router.get("/categories", async(req,res)=> {
-  try{
-    const{data: categories, error} = await supabase
-    .from("categories")
-    .select("*");
+router.get("/categories", async (req, res) => {
+  try {
+    const { data: categories, error } = await supabase
+      .from("categories")
+      .select("*");
 
-    if(error){
-      return res.status(500).json({error: error.message});
+    if (error) {
+      return res.status(500).json({ error: error.message });
     }
 
     const categoryOrder = [
@@ -26,14 +26,15 @@ router.get("/categories", async(req,res)=> {
     ];
 
     const sortedCategories = categoryOrder
-    .map((name) => categories.find((c)=> c.name === name))
-    .filter(Boolean);
+      .map((name) => categories.find((c) => c.name === name))
+      .filter(Boolean);
 
-    res.json({categories: sortedCategories,});
-  }catch (err){
-    res.status(500).json({error: "Server error"})
+    res.json({ categories: sortedCategories });
+  } catch (err) {
+    res.status(500).json({ error: "Server error" });
   }
 });
+
 router.get("/items", async (req, res) => {
   try {
     const { data, error } = await supabase
@@ -49,24 +50,24 @@ router.get("/items", async (req, res) => {
           name
         )
       `)
-      .eq("is_available", true);
+      .order("name", { ascending: true });
 
     if (error) {
       return res.status(500).json({ error: error.message });
     }
 
-    // Format data for frontend
+    // Format data for frontend with availability status
     const menuItems = data.map((item) => ({
       id: item.id,
       name: item.name,
       description: item.description,
       price: item.price,
       image: item.image_url,
-      category: item.categories.name,
+      category: item.categories?.name || "Uncategorized",
+      isAvailable: item.is_available !== false,
     }));
 
     res.json({ menuItems });
-
   } catch (err) {
     res.status(500).json({ error: "Server error" });
   }

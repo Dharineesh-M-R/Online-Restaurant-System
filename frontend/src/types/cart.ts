@@ -8,6 +8,7 @@ export interface Dish {
   description: string;
   image: string;
   isVeg?: boolean;
+  isAvailable?: boolean;
 }
 
 export interface CartItem {
@@ -18,6 +19,7 @@ export interface CartItem {
   isVeg: boolean;
   notes?: string;
   status?: string;
+  isOutOfStock?: boolean;
 }
 
 export interface PlacedServe {
@@ -43,4 +45,6 @@ export interface CartContextType {
   placeCurrentOrder: () => void;
   cancelSession: () => Promise<void>;
   sessionStatus: string | null;
+  outOfStockAlerts: string[];
+  dismissOutOfStockAlert: (dishName: string) => void;
 }

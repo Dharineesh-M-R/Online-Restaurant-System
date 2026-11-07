@@ -24,15 +24,15 @@ router.post("/login", async (req, res) => {
     }
 
     // 2. Check the PIN
-    // Note: In a production app, you would use a library like 'bcrypt' to compare hashed passwords.
-    // For this prototype, we are matching the exact string from the SQL setup.
     if (staff.pin !== pin) {
       return res.status(401).json({ error: "Invalid PIN." });
     }
 
-    // 3. Success! Send back the staff details and their specific role
+    // 3. Success! Send back the staff details, DB UUID, and their specific role
     res.json({
       success: true,
+      id: staff.id,
+      staffId: staff.id,
       role: staff.role,     // 'waiter', 'kitchen', or 'billing'
       name: staff.name,
       employeeId: staff.employee_id
