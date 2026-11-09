@@ -7,16 +7,16 @@ import {
   CreditCard,
   Banknote,
   IndianRupee,
-  Download,
   ChevronDown,
   Receipt,
-  Calendar,
   X,
   FileSpreadsheet,
+  Eye,
 } from "lucide-react";
 
 interface PastOrder {
   id: string;
+  rawId?: string;
   tableNumber: number;
   totalAmount: number;
   originalAmount: number;
@@ -29,11 +29,27 @@ interface PastOrder {
   chefs?: string[];
 }
 
+interface OrderItemDetail {
+  id: string;
+  name: string;
+  quantity: number;
+  price: number;
+  total: number;
+  status: string;
+  notes?: string;
+}
+
 export default function BillingHistory() {
   const [orders, setOrders] = useState<PastOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [dateFilter, setDateFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
+
+  // Detailed Receipt Modal State
+  const [selectedOrder, setSelectedOrder] = useState<PastOrder | null>(null);
+  const [orderItems, setOrderItems] = useState<OrderItemDetail[]>([]);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [loadingDetails, setLoadingDetails] = useState(false);
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
@@ -49,7 +65,10 @@ export default function BillingHistory() {
     const fetchBillingHistory = async () => {
       try {
         const res = await fetch(`${apiUrl}/management/billing/history`);
-        if (res.ok) setOrders((await res.json()).orders);
+        if (res.ok) {
+          const data = await res.json();
+          setOrders(data.orders || []);
+        }
       } catch (error) {
         console.error("Failed to fetch orders:", error);
       } finally {
@@ -58,6 +77,26 @@ export default function BillingHistory() {
     };
     fetchBillingHistory();
   }, [apiUrl]);
+
+  // Fetch line items for specific order
+  const handleViewDetails = async (order: PastOrder) => {
+    setSelectedOrder(order);
+    setIsModalOpen(true);
+    setLoadingDetails(true);
+    setOrderItems([]);
+
+    try {
+      const res = await fetch(`${apiUrl}/management/billing/history/${order.rawId || order.id}`);
+      if (res.ok) {
+        const data = await res.json();
+        setOrderItems(data.items || []);
+      }
+    } catch (error) {
+      console.error("Failed to fetch line items:", error);
+    } finally {
+      setLoadingDetails(false);
+    }
+  };
 
   const displayOrders = orders.filter((order) => {
     const matchesSearch =
@@ -235,6 +274,7 @@ export default function BillingHistory() {
                 <th className="py-4 px-5">Total Amount</th>
                 <th className="py-4 px-5">Tender Method</th>
                 <th className="py-4 px-5">Settlement</th>
+                <th className="py-4 px-5 text-center">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-stone-100 text-xs">
@@ -325,11 +365,20 @@ export default function BillingHistory() {
                       {order.paymentStatus}
                     </span>
                   </td>
+                  <td className="py-4 px-5 text-center">
+                    <button
+                      onClick={() => handleViewDetails(order)}
+                      className="inline-flex items-center justify-center p-2 bg-stone-100 text-stone-600 hover:bg-orange-50 hover:text-orange-600 rounded-xl transition-colors cursor-pointer"
+                      title="View Receipt Details"
+                    >
+                      <Eye size={16} strokeWidth={2.5} />
+                    </button>
+                  </td>
                 </tr>
               ))}
               {displayOrders.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-stone-400 font-bold">
+                  <td colSpan={9} className="py-12 text-center text-stone-400 font-bold">
                     No transactions found for the selected filter.
                   </td>
                 </tr>
@@ -338,6 +387,127 @@ export default function BillingHistory() {
           </table>
         </div>
       </div>
+
+      {/* Detailed Receipt Drill-Down Modal */}
+      {isModalOpen && selectedOrder && (
+        <div className="fixed inset-0 bg-stone-900/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl border border-stone-200/80 overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[85vh]">
+            
+            {/* Modal Header */}
+            <div className="p-6 border-b border-stone-100 flex justify-between items-start bg-[#faf9f6] shrink-0">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-xl font-black text-stone-900 font-mono">{selectedOrder.id}</h3>
+                  <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-orange-100 text-orange-700">
+                    {selectedOrder.tableNumber > 100
+                      ? `Token #${selectedOrder.tableNumber - 100}`
+                      : `Table #${selectedOrder.tableNumber}`}
+                  </span>
+                </div>
+                <p className="text-xs font-bold text-stone-400 mt-1">
+                  {parseDatabaseDate(selectedOrder.createdAt).toLocaleString([], {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </p>
+                {selectedOrder.waiterName && selectedOrder.waiterName !== "Unassigned" && (
+                  <p className="text-[11px] font-bold text-blue-700 mt-1">
+                    Assigned Waiter: {selectedOrder.waiterName}
+                  </p>
+                )}
+              </div>
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="text-stone-400 hover:text-stone-900 bg-stone-100 hover:bg-stone-200 p-2 rounded-full transition cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            
+            {/* Modal Body (Scrollable Line Items) */}
+            <div className="p-6 overflow-y-auto flex-1 divide-y divide-stone-100">
+              <h4 className="text-[11px] font-black text-stone-400 uppercase tracking-widest mb-3">
+                Itemized Dishes & Quantities
+              </h4>
+              
+              {loadingDetails ? (
+                <div className="py-12 flex flex-col items-center justify-center text-stone-400 text-xs font-bold gap-2">
+                  <div className="w-6 h-6 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
+                  <span>Loading Line Items...</span>
+                </div>
+              ) : orderItems.length > 0 ? (
+                <div className="space-y-3.5 pt-2">
+                  {orderItems.map((item, index) => (
+                    <div key={item.id || index} className="flex justify-between items-start gap-3">
+                      <div className="flex gap-2.5 items-start">
+                        <span className="font-black text-stone-600 bg-stone-100 px-2 py-0.5 rounded-md text-xs shrink-0">
+                          {item.quantity}×
+                        </span>
+                        <div>
+                          <p className="font-black text-stone-900 text-xs leading-snug">{item.name}</p>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span className="text-[11px] font-medium text-stone-400">₹{item.price} each</span>
+                            {item.status && (
+                              <span className="text-[9px] font-bold uppercase tracking-wider text-stone-500 bg-stone-100 px-1.5 py-0.2 rounded">
+                                {item.status.replace("_", " ")}
+                              </span>
+                            )}
+                          </div>
+                          {item.notes && (
+                            <p className="text-[10px] text-stone-400 italic mt-0.5">Note: {item.notes}</p>
+                          )}
+                        </div>
+                      </div>
+                      <span className="font-black text-stone-900 text-xs shrink-0">₹{item.total}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-10 font-bold text-stone-400 text-xs">
+                  No line items found for this order.
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer (Financial Summary) */}
+            <div className="p-6 bg-[#faf9f6] border-t border-stone-200 shrink-0 space-y-2">
+              <div className="flex justify-between items-center text-stone-500 font-bold text-xs">
+                <span>Subtotal (Before Discount)</span>
+                <span>₹{selectedOrder.originalAmount || selectedOrder.totalAmount}</span>
+              </div>
+              
+              {selectedOrder.discountAmount > 0 && (
+                <div className="flex justify-between items-center text-orange-600 font-black text-xs">
+                  <span>Offer Discount</span>
+                  <span>- ₹{selectedOrder.discountAmount}</span>
+                </div>
+              )}
+              
+              <div className="border-t border-dashed border-stone-200 my-2 pt-2.5 flex justify-between items-center">
+                <span className="font-black text-stone-900 text-xs uppercase tracking-wider">Total Paid</span>
+                <span className="text-2xl font-black text-stone-900">₹{selectedOrder.totalAmount}</span>
+              </div>
+              
+              <div className="mt-3 pt-3 border-t border-stone-200 flex justify-between items-center">
+                <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                  selectedOrder.paymentStatus === 'paid'
+                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                    : 'bg-rose-50 text-rose-700 border border-rose-200'
+                }`}>
+                  {selectedOrder.paymentStatus}
+                </span>
+                <span className="text-xs font-black text-stone-500 uppercase tracking-widest">
+                  Tender: {selectedOrder.paymentMethod}
+                </span>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      )}
 
     </div>
   );

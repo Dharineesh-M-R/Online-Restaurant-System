@@ -58,6 +58,7 @@ router.get("/billing/history", async (req, res) => {
 
       return {
         id: `ORD-${order.id.substring(0, 6).toUpperCase()}`,
+        rawId: order.id,
         tableNumber: order.tables?.table_number || 0,
         totalAmount: Number(order.total_amount),
         originalAmount: Number(order.original_amount !== null && order.original_amount !== undefined ? order.original_amount : order.total_amount),
@@ -79,6 +80,61 @@ router.get("/billing/history", async (req, res) => {
   }
 });
 
+// GET: Fetch detailed line items for a specific past order
+router.get("/billing/history/:orderId", async (req, res) => {
+  try {
+    const { orderId } = req.params;
+
+    // If a short ID like 'ORD-123456' was passed, support querying by order.id prefix
+    let targetOrderId = orderId;
+    if (orderId.startsWith("ORD-")) {
+      const shortCode = orderId.replace("ORD-", "").toLowerCase();
+      const { data: matchedOrder } = await supabase
+        .from("orders")
+        .select("id")
+        .ilike("id", `${shortCode}%`)
+        .limit(1)
+        .maybeSingle();
+
+      if (matchedOrder) {
+        targetOrderId = matchedOrder.id;
+      }
+    }
+
+    // Query order_items through the order_serves link, and join menu_items for the name
+    const { data, error } = await supabase
+      .from("order_items")
+      .select(`
+        id,
+        quantity,
+        price,
+        status,
+        notes,
+        menu_items ( name ),
+        order_serves!inner ( order_id )
+      `)
+      .eq("order_serves.order_id", targetOrderId)
+      .neq("status", "cancelled"); 
+
+    if (error) throw error;
+
+    // Format the data cleanly for the frontend
+    const formattedItems = (data || []).map(item => ({
+      id: item.id,
+      name: item.menu_items?.name || "Unknown Item",
+      quantity: item.quantity,
+      price: Number(item.price || 0),
+      total: Number(item.quantity || 1) * Number(item.price || 0),
+      status: item.status,
+      notes: item.notes
+    }));
+
+    res.json({ items: formattedItems });
+  } catch (err) {
+    console.error("Fetch Order Details Error:", err);
+    res.status(500).json({ error: "Failed to fetch order details" });
+  }
+});
 
 // ==========================================
 // MENU EDITOR ROUTES
