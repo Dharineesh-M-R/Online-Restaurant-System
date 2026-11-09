@@ -122,6 +122,14 @@ export default function KitchenDashboard() {
     return () => clearInterval(interval);
   }, [apiUrl]);
 
+  // Live 1-second dynamic clock & urgency timer ticker
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
   // Audio Notification Trigger (When waiter confirms and sends dishes to kitchen)
   useEffect(() => {
     // Count how many total items are currently pending across all tickets
@@ -265,10 +273,11 @@ export default function KitchenDashboard() {
 
     if (isNaN(orderDate.getTime())) {
       return {
-        bg: "bg-zinc-900",
-        text: "text-zinc-400",
+        bg: "bg-[#faf9f6]",
+        text: "text-stone-400",
+        timerBadge: "bg-stone-100 text-stone-600 border-stone-200",
         label: "00:00",
-        ring: "border-zinc-800",
+        ring: "border-stone-200/80 shadow-2xs",
         level: "normal",
       };
     }
@@ -282,28 +291,31 @@ export default function KitchenDashboard() {
 
     if (diffMins >= 20) {
       return {
-        bg: "bg-rose-950/90",
-        text: "text-rose-400",
+        bg: "bg-rose-50",
+        text: "text-rose-700",
+        timerBadge: "bg-rose-100 text-rose-800 border-rose-300",
         label: timeLabel,
-        ring: "border-rose-600 animate-pulse",
+        ring: "border-rose-400 shadow-md shadow-rose-500/10",
         level: "critical",
       };
     }
     if (diffMins >= 10) {
       return {
-        bg: "bg-amber-950/60",
-        text: "text-amber-400",
+        bg: "bg-amber-50",
+        text: "text-amber-800",
+        timerBadge: "bg-amber-100 text-amber-900 border-amber-300",
         label: timeLabel,
-        ring: "border-amber-500/70",
+        ring: "border-amber-300 shadow-sm shadow-amber-500/5",
         level: "warning",
       };
     }
 
     return {
-      bg: "bg-zinc-900",
-      text: "text-emerald-400",
+      bg: "bg-[#faf9f6]",
+      text: "text-emerald-700",
+      timerBadge: "bg-emerald-50 text-emerald-800 border-emerald-200",
       label: timeLabel,
-      ring: "border-zinc-800",
+      ring: "border-stone-200/80 shadow-2xs",
       level: "normal",
     };
   };
@@ -365,41 +377,42 @@ export default function KitchenDashboard() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center text-zinc-500 font-sans">
-        <ChefHat size={56} className="animate-bounce mb-3 text-orange-500" />
-        <h2 className="text-xl font-black uppercase tracking-widest text-zinc-300">
+      <div className="min-h-screen bg-[#faf9f6] flex flex-col items-center justify-center text-stone-500 font-sans">
+        <ChefHat size={48} className="animate-bounce mb-3 text-orange-500" />
+        <h2 className="text-lg font-black uppercase tracking-widest text-stone-900">
           Initializing Kitchen Display...
         </h2>
+        <p className="text-xs text-stone-400 font-bold mt-1">Connecting to live station queue</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 p-4 sm:p-6 font-sans selection:bg-orange-500/30">
+    <div className="min-h-screen bg-[#faf9f6] text-stone-900 p-4 sm:p-6 font-sans selection:bg-orange-500/20">
       
       {/* Top KDS Header */}
-      <header className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 mb-6 pb-4 border-b border-zinc-800/80">
+      <header className="bg-white p-4 sm:p-5 rounded-3xl shadow-2xs border border-stone-200/80 mb-6 flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
         
         <div className="flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-2xl bg-orange-500/10 border border-orange-500/30 text-orange-500 flex items-center justify-center shadow-xs">
+          <div className="w-12 h-12 rounded-2xl bg-orange-50 border border-orange-200 text-orange-600 flex items-center justify-center shadow-2xs shrink-0">
             <ChefHat size={26} />
           </div>
           <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-black text-white uppercase tracking-tight">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-2xl font-black text-stone-900 uppercase tracking-tight">
                 Kitchen KDS
               </h1>
-              <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-400 border border-orange-500/30">
+              <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-orange-100 text-orange-700 border border-orange-200">
                 Live Station
               </span>
               {currentChef?.name && (
-                <span className="text-[10px] font-bold text-zinc-300 bg-zinc-800 px-2 py-0.5 rounded-md border border-zinc-700">
+                <span className="text-[10px] font-bold text-stone-700 bg-stone-100 px-2.5 py-0.5 rounded-md border border-stone-200">
                   Chef: {currentChef.name} ({currentChef.employeeId})
                 </span>
               )}
             </div>
-            <p className="text-zinc-400 text-xs font-bold mt-0.5">
-              Clock: {currentTime.toLocaleTimeString()} • {filteredTickets.length} Active Tickets
+            <p className="text-stone-400 text-xs font-bold mt-0.5">
+              Clock: <span suppressHydrationWarning className="text-stone-700 font-black">{currentTime.toLocaleTimeString()}</span> • {filteredTickets.length} Active Tickets
             </p>
           </div>
         </div>
@@ -414,8 +427,8 @@ export default function KitchenDashboard() {
                 onClick={() => setActiveStation(st)}
                 className={`px-3.5 py-2 rounded-xl text-xs font-black whitespace-nowrap transition cursor-pointer border ${
                   activeStation === st
-                    ? "bg-orange-600 border-orange-500 text-white shadow-md shadow-orange-600/20"
-                    : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white"
+                    ? "bg-orange-600 border-orange-600 text-white shadow-xs"
+                    : "bg-stone-50 border-stone-200/80 text-stone-600 hover:bg-stone-100 hover:text-stone-900"
                 }`}
               >
                 {st}
@@ -425,11 +438,13 @@ export default function KitchenDashboard() {
 
           <div className="flex items-center gap-2">
             {/* View Mode Toggle */}
-            <div className="flex bg-zinc-900 p-1 rounded-xl border border-zinc-800">
+            <div className="flex bg-stone-100 p-1 rounded-xl border border-stone-200/80">
               <button
                 onClick={() => setViewMode("tickets")}
                 className={`px-3 py-1.5 rounded-lg text-xs font-black transition flex items-center gap-1.5 cursor-pointer ${
-                  viewMode === "tickets" ? "bg-zinc-800 text-white" : "text-zinc-500 hover:text-zinc-300"
+                  viewMode === "tickets"
+                    ? "bg-white text-stone-900 shadow-2xs"
+                    : "text-stone-500 hover:text-stone-800"
                 }`}
               >
                 <Grip size={14} />
@@ -438,7 +453,9 @@ export default function KitchenDashboard() {
               <button
                 onClick={() => setViewMode("allday")}
                 className={`px-3 py-1.5 rounded-lg text-xs font-black transition flex items-center gap-1.5 cursor-pointer ${
-                  viewMode === "allday" ? "bg-zinc-800 text-white" : "text-zinc-500 hover:text-zinc-300"
+                  viewMode === "allday"
+                    ? "bg-white text-stone-900 shadow-2xs"
+                    : "text-stone-500 hover:text-stone-800"
                 }`}
               >
                 <List size={14} />
@@ -452,30 +469,30 @@ export default function KitchenDashboard() {
                 setIsStockModalOpen(true);
                 fetchStockItems();
               }}
-              className="px-3.5 py-1.5 rounded-xl text-xs font-black bg-rose-950/40 text-rose-300 border border-rose-800/60 hover:bg-rose-900/40 active:scale-95 transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+              className="px-3.5 py-2 rounded-xl text-xs font-black bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 active:scale-95 transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
             >
-              <AlertTriangle size={14} className="text-rose-400" />
+              <AlertTriangle size={14} className="text-rose-600" />
               <span>86 Stock Control</span>
             </button>
 
             {/* Audio Toggle */}
             <button
               onClick={() => setIsMuted(!isMuted)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold text-xs transition-all cursor-pointer border ${
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl font-bold text-xs transition-all cursor-pointer border ${
                 isMuted
-                  ? "bg-zinc-900 border-zinc-800 text-zinc-500 hover:text-zinc-300"
-                  : "bg-emerald-950/60 border-emerald-800 text-emerald-400 shadow-2xs"
+                  ? "bg-stone-100 border-stone-200 text-stone-500 hover:bg-stone-200"
+                  : "bg-emerald-50 border-emerald-200 text-emerald-700 shadow-2xs"
               }`}
               title={isMuted ? "Sound Off (Click to enable alerts)" : "Sound On (Click to mute)"}
             >
-              {isMuted ? <BellOff size={15} /> : <Bell size={15} className="animate-bounce" />}
+              {isMuted ? <BellOff size={15} /> : <Bell size={15} className="animate-bounce text-emerald-600" />}
               <span>{isMuted ? "Sound Off" : "Sound On"}</span>
             </button>
 
             {/* Logout */}
             <button
               onClick={handleLogout}
-              className="p-2 bg-zinc-900 border border-zinc-800 rounded-xl text-zinc-400 hover:text-rose-400 transition cursor-pointer"
+              className="p-2 bg-stone-100 border border-stone-200 rounded-xl text-stone-500 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 transition cursor-pointer"
               title="Sign out"
             >
               <LogOut size={16} />
@@ -489,12 +506,14 @@ export default function KitchenDashboard() {
       {viewMode === "tickets" && (
         <div className="flex flex-wrap items-start gap-4 pb-12">
           {filteredTickets.length === 0 ? (
-            <div className="w-full py-28 flex flex-col items-center justify-center text-zinc-600">
-              <CheckCircle size={64} className="mb-3 opacity-20 text-emerald-500" />
-              <h2 className="text-xl font-black uppercase tracking-widest text-zinc-400">
+            <div className="w-full py-28 flex flex-col items-center justify-center text-stone-400">
+              <div className="w-16 h-16 bg-emerald-50 text-emerald-600 border border-emerald-200 rounded-3xl flex items-center justify-center mb-4 shadow-2xs">
+                <CheckCircle size={32} />
+              </div>
+              <h2 className="text-xl font-black uppercase tracking-tight text-stone-900">
                 All Orders Dispatched
               </h2>
-              <p className="text-xs text-zinc-600 mt-1">Ready for incoming table orders</p>
+              <p className="text-xs text-stone-500 mt-1">Ready for incoming table orders</p>
             </div>
           ) : (
             filteredTickets.map((ticket) => {
@@ -504,33 +523,33 @@ export default function KitchenDashboard() {
               return (
                 <div
                   key={ticket.serveId}
-                  className={`bg-zinc-900 rounded-3xl shadow-xl flex flex-col w-full md:w-[calc(50%-8px)] lg:w-[calc(33.333%-11px)] border-2 ${urgency.ring} overflow-hidden`}
+                  className={`bg-white rounded-3xl shadow-sm flex flex-col w-full md:w-[calc(50%-8px)] lg:w-[calc(33.333%-11px)] border-2 ${urgency.ring} overflow-hidden transition-all`}
                 >
                   {/* Ticket Header */}
-                  <div className={`${urgency.bg} p-4 flex justify-between items-center border-b border-zinc-800`}>
+                  <div className={`${urgency.bg} p-4 flex justify-between items-center border-b border-stone-200/80`}>
                     <div className="flex items-center gap-2.5">
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-white font-black text-lg ${
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-white font-black text-base shadow-2xs ${
                         isParcel ? "bg-purple-600" : "bg-orange-600"
                       }`}>
-                        {isParcel ? <ShoppingBag size={20} /> : ticket.tableNumber}
+                        {isParcel ? <ShoppingBag size={18} /> : ticket.tableNumber}
                       </div>
                       <div>
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <h2 className="text-lg font-black text-white leading-tight">
+                          <h2 className="text-base font-black text-stone-900 leading-tight">
                             {isParcel ? `Parcel #${ticket.tableNumber - 100}` : `Table #${ticket.tableNumber}`}
                           </h2>
                           {ticket.tabName && (
-                            <span className="text-[10px] font-black uppercase text-amber-300 bg-amber-950/80 border border-amber-700/80 px-2 py-0.5 rounded-md">
+                            <span className="text-[10px] font-black uppercase text-purple-700 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-md">
                               👥 {ticket.tabName}
                             </span>
                           )}
                         </div>
-                        <div className="flex items-center gap-1.5 mt-0.5">
-                          <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
+                        <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                          <span className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">
                             Round #{ticket.serveNumber}
                           </span>
                           {ticket.waiterName && (
-                            <span className="text-[9px] font-bold text-purple-300 bg-purple-950/60 px-1.5 py-0.2 rounded border border-purple-800">
+                            <span className="text-[9px] font-bold text-purple-700 bg-purple-50 px-1.5 py-0.2 rounded border border-purple-200">
                               Waiter: {ticket.waiterName}
                             </span>
                           )}
@@ -538,47 +557,47 @@ export default function KitchenDashboard() {
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-1.5 bg-zinc-950/70 px-3 py-1.5 rounded-xl border border-white/10">
-                      <Clock size={14} className={urgency.text} />
-                      <span className={`text-sm font-black tracking-wider ${urgency.text}`}>
+                    <div className={`flex items-center gap-1.5 ${urgency.timerBadge} px-2.5 py-1 rounded-xl border font-black`}>
+                      <Clock size={13} className={urgency.text} />
+                      <span className={`text-xs font-black tracking-wider ${urgency.text}`}>
                         {urgency.label}
                       </span>
                     </div>
                   </div>
 
                   {/* Items List */}
-                  <div className="p-3 flex-1 overflow-y-auto space-y-2.5 max-h-[60vh]">
+                  <div className="p-3.5 flex-1 overflow-y-auto space-y-2.5 max-h-[60vh]">
                     {ticket.items.map((item) => (
                       <div
                         key={item.id}
                         onClick={() => advanceStatus(item.id, item.status)}
-                        className={`w-full p-3.5 rounded-2xl border-2 transition-all cursor-pointer active:scale-98 ${
+                        className={`w-full p-3.5 rounded-2xl border transition-all cursor-pointer active:scale-98 ${
                           item.status === "pending"
-                            ? "bg-zinc-950/60 border-zinc-800 hover:border-zinc-700"
+                            ? "bg-[#faf9f6] border-stone-200/80 hover:border-orange-300 hover:bg-orange-50/20"
                             : item.status === "preparing"
-                            ? "bg-amber-950/30 border-amber-500/70 shadow-lg shadow-amber-500/10"
-                            : "bg-emerald-950/20 border-emerald-900/40 opacity-40 hover:opacity-100"
+                            ? "bg-amber-50/70 border-2 border-amber-400 shadow-xs"
+                            : "bg-emerald-50/40 border border-emerald-200 opacity-60 hover:opacity-100"
                         }`}
                       >
                         <div className="flex justify-between items-start gap-3">
                           <div className="flex items-start gap-3">
                             <span
-                              className={`text-2xl font-black ${
+                              className={`text-xl font-black ${
                                 item.status === "pending"
-                                  ? "text-zinc-300"
+                                  ? "text-stone-800"
                                   : item.status === "preparing"
-                                  ? "text-amber-400"
-                                  : "text-emerald-400"
+                                  ? "text-amber-700"
+                                  : "text-emerald-700"
                               }`}
                             >
                               {item.quantity}×
                             </span>
                             <div>
                               <h3
-                                className={`text-base font-black leading-snug ${
+                                className={`text-sm font-black leading-snug ${
                                   item.status === "ready"
-                                    ? "line-through text-zinc-500"
-                                    : "text-white"
+                                    ? "line-through text-stone-400"
+                                    : "text-stone-900"
                                 }`}
                               >
                                 {item.name}
@@ -587,7 +606,7 @@ export default function KitchenDashboard() {
                               {/* Which Chef is cooking this dish badge */}
                               {item.chefName && (
                                 <div className="mt-1 flex items-center gap-1">
-                                  <span className="text-[10px] font-black text-amber-400 bg-amber-950/70 px-2 py-0.5 rounded-md border border-amber-800/80 flex items-center gap-1">
+                                  <span className="text-[10px] font-black text-amber-800 bg-amber-100 px-2 py-0.5 rounded-md border border-amber-200 flex items-center gap-1">
                                     <ChefHat size={11} /> Chef: {item.chefName}
                                   </span>
                                 </div>
@@ -595,7 +614,7 @@ export default function KitchenDashboard() {
 
                               {/* Special Cooking Notes */}
                               {item.notes && (
-                                <div className="mt-1.5 inline-flex items-center gap-1 bg-rose-600/90 text-white px-2 py-0.5 rounded-md border border-rose-400 text-[10px] font-black uppercase tracking-wider">
+                                <div className="mt-1.5 inline-flex items-center gap-1 bg-rose-50 text-rose-700 border border-rose-200 px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider">
                                   <AlertTriangle size={12} />
                                   <span>{item.notes}</span>
                                 </div>
@@ -605,28 +624,28 @@ export default function KitchenDashboard() {
 
                           <div className="shrink-0 mt-0.5">
                             {item.status === "pending" && (
-                              <div className="w-7 h-7 rounded-full border-3 border-zinc-700" />
+                              <div className="w-6 h-6 rounded-full border-2 border-stone-300" />
                             )}
                             {item.status === "preparing" && (
-                              <Flame size={24} className="text-amber-400 animate-pulse" />
+                              <Flame size={22} className="text-amber-600 animate-pulse" />
                             )}
                             {item.status === "ready" && (
-                              <CheckCircle size={24} className="text-emerald-400" />
+                              <CheckCircle size={22} className="text-emerald-600" />
                             )}
                           </div>
                         </div>
 
                         {/* Out of Stock Safety Action */}
                         {(item.status === "pending" || item.status === "preparing") && (
-                          <div className="mt-3 pt-2 border-t border-zinc-800/60 flex justify-end">
+                          <div className="mt-2.5 pt-2 border-t border-stone-200/60 flex justify-end">
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
                                 markOutOfStock(item.id, item.menuItemId, item.name);
                               }}
-                              className="text-[10px] font-black uppercase tracking-wider text-rose-400 hover:text-rose-300 bg-rose-950/30 px-3 py-1.5 rounded-lg flex items-center gap-1 transition"
+                              className="text-[10px] font-black uppercase tracking-wider text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2.5 py-1 rounded-lg flex items-center gap-1 transition cursor-pointer active:scale-95"
                             >
-                              <X size={13} /> Mark Out of Stock
+                              <X size={12} /> Mark Out of Stock
                             </button>
                           </div>
                         )}
@@ -644,57 +663,60 @@ export default function KitchenDashboard() {
       {viewMode === "allday" && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 pb-12">
           {Object.keys(allDayData).length === 0 ? (
-            <div className="col-span-full py-28 flex flex-col items-center justify-center text-zinc-600">
-              <CheckCircle size={64} className="mb-3 opacity-20 text-emerald-500" />
-              <h2 className="text-xl font-black uppercase tracking-widest text-zinc-400">
+            <div className="col-span-full py-28 flex flex-col items-center justify-center text-stone-400">
+              <div className="w-16 h-16 bg-emerald-50 text-emerald-600 border border-emerald-200 rounded-3xl flex items-center justify-center mb-4 shadow-2xs">
+                <CheckCircle size={32} />
+              </div>
+              <h2 className="text-xl font-black uppercase tracking-tight text-stone-900">
                 All Prep Queues Cleared
               </h2>
+              <p className="text-xs text-stone-500 mt-1">No pending orders awaiting preparation</p>
             </div>
           ) : (
             Object.entries(allDayData).map(([dishName, data]) => (
               <div
                 key={dishName}
                 onClick={() => advanceBulkStatus(data.idsToUpdate, data.status)}
-                className={`p-6 rounded-3xl border-2 transition-all cursor-pointer active:scale-95 flex flex-col justify-between min-h-52 ${
+                className={`p-6 rounded-3xl border-2 transition-all cursor-pointer active:scale-95 flex flex-col justify-between min-h-52 shadow-2xs ${
                   data.status === "pending"
-                    ? "bg-zinc-900 border-zinc-800 hover:border-zinc-700"
-                    : "bg-amber-950/30 border-amber-500/70 shadow-lg shadow-amber-500/10"
+                    ? "bg-white border-stone-200/80 hover:border-orange-300"
+                    : "bg-amber-50/70 border-amber-400 shadow-md shadow-amber-500/10"
                 }`}
               >
                 <div>
                   <div className="flex justify-between items-start mb-3">
                     <span
                       className={`text-5xl font-black tracking-tight ${
-                        data.status === "preparing" ? "text-amber-400" : "text-white"
+                        data.status === "preparing" ? "text-amber-700" : "text-stone-900"
                       }`}
                     >
                       {data.totalQuantity}×
                     </span>
                     {data.status === "preparing" ? (
-                      <Flame size={32} className="text-amber-400 animate-pulse" />
+                      <Flame size={32} className="text-amber-600 animate-pulse" />
                     ) : (
-                      <div className="w-8 h-8 rounded-full border-3 border-zinc-700" />
+                      <div className="w-8 h-8 rounded-full border-2 border-stone-300" />
                     )}
                   </div>
-                  <h3 className="text-xl font-black text-white leading-tight uppercase">
+                  <h3 className="text-lg font-black text-stone-900 leading-tight uppercase">
                     {dishName}
                   </h3>
                   {data.chefs.length > 0 && (
-                    <p className="text-xs font-bold text-amber-400 mt-1">
-                      Cooking: {data.chefs.join(", ")}
+                    <p className="text-xs font-bold text-amber-800 mt-1 flex items-center gap-1">
+                      <ChefHat size={13} /> Cooking: {data.chefs.join(", ")}
                     </p>
                   )}
                 </div>
 
-                <div className="mt-4 pt-3 border-t border-zinc-800">
-                  <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest mb-1.5">
+                <div className="mt-4 pt-3 border-t border-stone-200/80">
+                  <p className="text-[10px] font-black text-stone-400 uppercase tracking-widest mb-1.5">
                     Orders for:
                   </p>
                   <div className="flex flex-wrap gap-1.5">
                     {data.destinations.map((dest, i) => (
                       <span
                         key={i}
-                        className="bg-zinc-800 text-zinc-300 text-[11px] font-bold px-2 py-0.5 rounded-md"
+                        className="bg-stone-100 text-stone-700 border border-stone-200/60 text-[11px] font-bold px-2 py-0.5 rounded-lg"
                       >
                         {dest}
                       </span>
@@ -709,58 +731,58 @@ export default function KitchenDashboard() {
 
       {/* Toast Notification */}
       {notificationToast && (
-        <div className="fixed bottom-6 right-6 z-50 bg-rose-600 text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-2 font-bold text-xs animate-in slide-in-from-bottom-5">
-          <AlertCircle size={16} />
+        <div className="fixed bottom-6 right-6 z-50 bg-stone-900 text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-2 font-bold text-xs animate-in slide-in-from-bottom-5">
+          <AlertCircle size={16} className="text-orange-400" />
           <span>{notificationToast}</span>
         </div>
       )}
 
       {/* 86 Stock Control Modal */}
       {isStockModalOpen && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+        <div className="fixed inset-0 bg-stone-950/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+          <div className="bg-white border border-stone-200 rounded-3xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
             
             {/* Modal Header */}
-            <div className="p-5 border-b border-zinc-800 flex justify-between items-center bg-zinc-950">
+            <div className="p-5 border-b border-stone-100 flex justify-between items-center bg-[#faf9f6]">
               <div>
-                <h3 className="text-lg font-black text-white flex items-center gap-2">
-                  <AlertTriangle size={18} className="text-rose-500" />
+                <h3 className="text-lg font-black text-stone-900 flex items-center gap-2">
+                  <AlertTriangle size={18} className="text-rose-600" />
                   <span>Kitchen 86 / Stock Management</span>
                 </h3>
-                <p className="text-[11px] font-bold text-zinc-400 mt-0.5">
-                  Toggle dishes Out of Stock instantly. Automatically updates Customer and Management views.
+                <p className="text-[11px] font-bold text-stone-400 mt-0.5">
+                  Toggle dishes Out of Stock instantly. Automatically updates Customer and Waiter views.
                 </p>
               </div>
               <button
                 onClick={() => setIsStockModalOpen(false)}
-                className="p-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition cursor-pointer"
+                className="p-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-500 hover:text-stone-800 transition cursor-pointer"
               >
                 <X size={18} />
               </button>
             </div>
 
             {/* Search and Filters */}
-            <div className="p-4 border-b border-zinc-800/80 bg-zinc-900 flex flex-col sm:flex-row gap-2.5 items-center justify-between">
+            <div className="p-4 border-b border-stone-100 bg-white flex flex-col sm:flex-row gap-2.5 items-center justify-between">
               <div className="relative w-full sm:w-72">
-                <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500" />
+                <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400" />
                 <input
                   type="text"
                   placeholder="Search dishes..."
                   value={stockSearch}
                   onChange={(e) => setStockSearch(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 bg-zinc-950 border border-zinc-800 rounded-xl text-xs font-bold text-white placeholder:text-zinc-600 outline-none focus:border-rose-500"
+                  className="w-full pl-9 pr-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-bold text-stone-900 placeholder:text-stone-400 outline-none focus:bg-white focus:border-rose-500 transition"
                 />
               </div>
 
-              <div className="flex gap-1.5 overflow-x-auto w-full sm:w-auto no-scrollbar">
+              <div className="flex gap-1.5 overflow-x-auto w-full sm:w-auto no-scrollbar py-0.5">
                 {["All", ...Array.from(new Set(stockItems.map((i) => i.category)))].map((cat) => (
                   <button
                     key={cat}
                     onClick={() => setStockCategoryFilter(cat)}
                     className={`px-3 py-1.5 rounded-lg text-[11px] font-black whitespace-nowrap cursor-pointer transition ${
                       stockCategoryFilter === cat
-                        ? "bg-rose-600 text-white"
-                        : "bg-zinc-800 text-zinc-400 hover:text-white"
+                        ? "bg-rose-600 text-white shadow-xs"
+                        : "bg-stone-100 text-stone-600 hover:bg-stone-200"
                     }`}
                   >
                     {cat}
@@ -770,7 +792,7 @@ export default function KitchenDashboard() {
             </div>
 
             {/* Scrollable Item List */}
-            <div className="p-4 overflow-y-auto divide-y divide-zinc-800/60 max-h-[55vh]">
+            <div className="p-4 overflow-y-auto divide-y divide-stone-100 max-h-[55vh]">
               {stockItems
                 .filter((item) => {
                   const matchesSearch = item.name.toLowerCase().includes(stockSearch.toLowerCase());
@@ -780,8 +802,8 @@ export default function KitchenDashboard() {
                 .map((item) => (
                   <div key={item.id} className="py-3 flex items-center justify-between gap-4">
                     <div>
-                      <h4 className="text-sm font-black text-white">{item.name}</h4>
-                      <p className="text-[10px] text-zinc-500 font-bold mt-0.5">
+                      <h4 className="text-sm font-black text-stone-900">{item.name}</h4>
+                      <p className="text-[11px] text-stone-400 font-bold mt-0.5">
                         {item.category} • ₹{item.price}
                       </p>
                     </div>
@@ -790,8 +812,8 @@ export default function KitchenDashboard() {
                       onClick={() => toggleStockItem(item.id, item.isAvailable)}
                       className={`px-3.5 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition active:scale-95 cursor-pointer flex items-center gap-1.5 ${
                         item.isAvailable
-                          ? "bg-emerald-950/60 text-emerald-400 border border-emerald-800 hover:bg-emerald-900/60"
-                          : "bg-rose-950/60 text-rose-400 border border-rose-800 hover:bg-rose-900/60"
+                          ? "bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 shadow-2xs"
+                          : "bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 shadow-2xs"
                       }`}
                     >
                       {item.isAvailable ? (
@@ -811,10 +833,10 @@ export default function KitchenDashboard() {
             </div>
 
             {/* Modal Footer */}
-            <div className="p-4 bg-zinc-950 border-t border-zinc-800 text-center">
+            <div className="p-4 bg-[#faf9f6] border-t border-stone-100 text-center">
               <button
                 onClick={() => setIsStockModalOpen(false)}
-                className="w-full bg-zinc-800 hover:bg-zinc-700 text-white py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition"
+                className="w-full bg-stone-900 hover:bg-black text-white py-3 rounded-2xl text-xs font-black uppercase tracking-wider transition shadow-sm cursor-pointer active:scale-98"
               >
                 Close Stock Control
               </button>

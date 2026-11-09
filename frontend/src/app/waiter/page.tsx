@@ -33,6 +33,7 @@ import {
   Check,
   Sparkles,
   Lock,
+  Search,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -108,11 +109,15 @@ export default function WaiterDashboard() {
 
   // Method A: Waiter Mini-POS State
   const [showMiniPosModal, setShowMiniPosModal] = useState(false);
-  const [menuItems, setMenuItems] = useState<{ id: number; name: string; price: number; category: string }[]>([]);
+  const [menuItems, setMenuItems] = useState<{ id: number; name: string; price: number; category: string; isAvailable?: boolean }[]>([]);
   const [miniPosCart, setMiniPosCart] = useState<{ menuItemId: number; name: string; price: number; quantity: number }[]>([]);
   const [posCategoryFilter, setPosCategoryFilter] = useState("All");
   const [posSearch, setPosSearch] = useState("");
   const [isSubmittingPosOrder, setIsSubmittingPosOrder] = useState(false);
+
+  // Fast Order Entry State (Inside Table Details modal)
+  const [isOrderingMode, setIsOrderingMode] = useState(false);
+  const [waiterCart, setWaiterCart] = useState<{ id: number; name: string; price: number; quantity: number }[]>([]);
 
   const [showPaymentModal, setShowPaymentModal] = useState(false);
 
@@ -170,8 +175,19 @@ export default function WaiterDashboard() {
   }, [apiUrl]);
 
   const viewTableDetails = async (tableNum: number, isOccupied: boolean, targetSessionId?: string) => {
-    if (!isOccupied) return;
     setSelectedTable(tableNum);
+    setIsOrderingMode(false);
+    setWaiterCart([]);
+    if (!isOccupied) {
+      setTableOrders([]);
+      setActiveSessionId(null);
+      setActiveSessionStatus(null);
+      setActiveTabName("Main");
+      setAvailableTabs([]);
+      setSelectedTableWaiter(null);
+      setIsModalLoading(false);
+      return;
+    }
     setIsModalLoading(true);
     try {
       const query = targetSessionId ? `?sessionId=${targetSessionId}&t=${Date.now()}` : `?t=${Date.now()}`;
@@ -290,6 +306,66 @@ export default function WaiterDashboard() {
       }
     } catch (err) {
       console.error("Failed to punch order:", err);
+    } finally {
+      setIsSubmittingPosOrder(false);
+    }
+  };
+
+  const addToWaiterCart = (menuItem: { id: number; name: string; price: number }) => {
+    setWaiterCart((prev) => {
+      const existing = prev.find((item) => item.id === menuItem.id);
+      if (existing) {
+        return prev.map((item) =>
+          item.id === menuItem.id ? { ...item, quantity: item.quantity + 1 } : item
+        );
+      }
+      return [...prev, { id: menuItem.id, name: menuItem.name, price: menuItem.price, quantity: 1 }];
+    });
+  };
+
+  const updateWaiterCartQuantity = (id: number, delta: number) => {
+    setWaiterCart((prev) =>
+      prev
+        .map((item) => (item.id === id ? { ...item, quantity: item.quantity + delta } : item))
+        .filter((item) => item.quantity > 0)
+    );
+  };
+
+  const handleSendToKitchen = async () => {
+    if (waiterCart.length === 0 || !selectedTable || isSubmittingPosOrder) return;
+    setIsSubmittingPosOrder(true);
+    try {
+      const waiterDbId = currentStaff?.id || localStorage.getItem("staff_db_id") || null;
+      const res = await fetch(`${apiUrl}/admin/waiter/place-order`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tableNumber: selectedTable,
+          sessionId: activeSessionId,
+          waiterId: waiterDbId,
+          items: waiterCart.map((i) => ({
+            id: i.id,
+            price: i.price,
+            quantity: i.quantity,
+            notes: "",
+          })),
+        }),
+      });
+
+      if (res.ok) {
+        const respData = await res.json().catch(() => ({}));
+        setWaiterCart([]);
+        setIsOrderingMode(false);
+        await viewTableDetails(selectedTable, true, respData.sessionId || activeSessionId || undefined);
+        await fetchFloorPlan();
+        fetchTasks();
+      } else {
+        const errorData = await res.json().catch(() => ({}));
+        alert(errorData.error || "Failed to send order to kitchen");
+      }
+    } catch (err) {
+      console.error("Failed to send order to kitchen:", err);
+      alert("Network error while sending order to kitchen");
     } finally {
       setIsSubmittingPosOrder(false);
     }
@@ -733,7 +809,7 @@ export default function WaiterDashboard() {
                         ? "bg-rose-50/60 border-rose-500 shadow-sm"
                         : table.isOccupied
                         ? "bg-amber-50/50 border-amber-300 shadow-2xs"
-                        : "bg-white border-stone-200/60 opacity-50 cursor-default"
+                        : "bg-white border-stone-200/80 hover:border-orange-300 hover:shadow-xs"
                     }`}
                   >
                     {/* Out of Stock Alert Badge */}
@@ -863,7 +939,7 @@ export default function WaiterDashboard() {
       {/* Table Details & Items Verification Modal */}
       {selectedTable && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-stone-950/60 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl border border-stone-200 animate-in slide-in-from-bottom-8 duration-200">
+          <div className={`bg-white w-full ${isOrderingMode ? "max-w-lg" : "max-w-md"} rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl border border-stone-200 animate-in slide-in-from-bottom-8 duration-200 transition-all`}>
             
             <div className="flex justify-between items-start mb-4 pb-3 border-b border-stone-100">
               <div>
@@ -874,9 +950,17 @@ export default function WaiterDashboard() {
                 </h2>
                 <div className="flex items-center gap-2 mt-0.5">
                   <p className={`text-[10px] font-bold uppercase tracking-widest ${
-                    isModalBilled ? "text-rose-500" : "text-stone-400"
+                    isOrderingMode
+                      ? "text-emerald-600 font-black"
+                      : isModalBilled
+                      ? "text-rose-500"
+                      : "text-stone-400"
                   }`}>
-                    {isModalBilled ? "Bill Requested Status" : "Verify & Confirm Order"}
+                    {isOrderingMode
+                      ? "Fast Menu POS • Direct to Kitchen"
+                      : isModalBilled
+                      ? "Bill Requested Status"
+                      : "Verify & Confirm Order"}
                   </p>
                   {selectedTableWaiter ? (
                     <span className="text-[10px] bg-purple-50 text-purple-700 border border-purple-200 px-2 py-0.2 rounded-md font-bold">
@@ -893,15 +977,19 @@ export default function WaiterDashboard() {
                 </div>
               </div>
               <button
-                onClick={() => setSelectedTable(null)}
-                className="p-1.5 rounded-full hover:bg-stone-100 text-stone-400 hover:text-stone-700 transition"
+                onClick={() => {
+                  setSelectedTable(null);
+                  setIsOrderingMode(false);
+                  setWaiterCart([]);
+                }}
+                className="p-1.5 rounded-full hover:bg-stone-100 text-stone-400 hover:text-stone-700 transition cursor-pointer"
               >
                 <X size={20} />
               </button>
             </div>
 
             {/* Virtual Sub-Tab Switcher & Sharing Controls */}
-            {!isSelectedTableParcel && (
+            {!isSelectedTableParcel && !isOrderingMode && (
               <div className="mb-3.5 pb-2.5 border-b border-stone-100">
                 <div className="flex items-center justify-between gap-2 mb-2">
                   <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
@@ -933,12 +1021,11 @@ export default function WaiterDashboard() {
                   </div>
                 </div>
 
-                {/* Sub-Tab Action Quick Bar: Method A (Mini-POS) & Method B (Guest QR) */}
+                {/* Sub-Tab Action Quick Bar: Fast Order & Guest QR */}
                 <div className="flex items-center gap-2 pt-1">
                   <button
                     onClick={() => {
-                      setShowMiniPosModal(true);
-                      setMiniPosCart([]);
+                      setIsOrderingMode(true);
                       fetchMenuItems();
                     }}
                     className="flex-1 py-1.5 px-3 bg-orange-50 hover:bg-orange-100 text-orange-700 border border-orange-200 rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 shadow-2xs"
@@ -959,193 +1046,418 @@ export default function WaiterDashboard() {
               </div>
             )}
 
-            <div className="max-h-[50vh] overflow-y-auto space-y-3 pr-1">
-              {/* Quick Remove All Out-of-Stock Banner */}
-              {!isModalLoading && tableOrders.some((i) => i.status === "out_of_stock" || i.isOutOfStock) && (
-                <div className="p-3 bg-rose-50 border border-rose-200 rounded-2xl flex items-center justify-between gap-2 shadow-2xs">
-                  <div className="flex items-center gap-2">
-                    <AlertTriangle size={15} className="text-rose-600 shrink-0" />
-                    <span className="text-xs font-bold text-rose-900 leading-tight">
-                      Kitchen flagged out-of-stock items on this table.
-                    </span>
+            {isOrderingMode ? (
+              <div className="flex flex-col flex-1 overflow-hidden">
+                {/* Search & Category Filter */}
+                <div className="pb-3 border-b border-stone-100 space-y-2">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-2.5 text-stone-400" size={15} />
+                    <input
+                      type="text"
+                      placeholder="Search dishes..."
+                      value={posSearch}
+                      onChange={(e) => setPosSearch(e.target.value)}
+                      className="w-full pl-9 pr-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-bold text-stone-900 outline-none focus:bg-white focus:border-orange-500 transition"
+                    />
                   </div>
-                  <button
-                    onClick={async () => {
-                      const oosItems = tableOrders.filter((i) => i.status === "out_of_stock" || i.isOutOfStock);
-                      try {
-                        await fetch(`${apiUrl}/admin/waiter/confirm-items`, {
-                          method: "PATCH",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({
-                            items: oosItems.map((i) => ({ id: i.id, action: "delete" })),
-                            tableNumber: selectedTable,
-                          }),
-                        });
-                        const oosIds = new Set(oosItems.map((i) => i.id));
-                        setTableOrders((prev) => prev.filter((item) => !oosIds.has(item.id)));
-                        fetchFloorPlan();
-                      } catch (err) {}
-                    }}
-                    className="bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-black px-3 py-1.5 rounded-xl flex items-center gap-1 transition shrink-0 active:scale-95 shadow-xs cursor-pointer"
-                  >
-                    <Trash2 size={12} />
-                    <span>Remove All OOS</span>
-                  </button>
-                </div>
-              )}
-
-              {isModalLoading ? (
-                <div className="py-12 flex flex-col items-center text-stone-300">
-                  <ChefHat size={36} className="animate-bounce mb-2" />
-                  <p className="font-bold text-xs uppercase tracking-wider">Syncing table items...</p>
-                </div>
-              ) : tableOrders.length === 0 ? (
-                <div className="py-10 text-center">
-                  <p className="text-stone-400 text-xs font-bold uppercase mb-4">No active dishes</p>
-                  <button
-                    onClick={handleClearEmptyTable}
-                    className="text-rose-600 bg-rose-50 hover:bg-rose-100 px-5 py-2.5 rounded-2xl text-xs font-bold transition flex items-center gap-1.5 mx-auto"
-                  >
-                    <Trash2 size={14} /> Clear Vacant Session
-                  </button>
-                </div>
-              ) : (
-                tableOrders.map((item) => {
-                  const isOOS = item.status === "out_of_stock" || item.isOutOfStock;
-                  return (
-                      <div
-                        key={item.id}
-                        className={`p-3.5 rounded-2xl border transition-colors ${
-                          isOOS
-                            ? "bg-rose-50 border-rose-300 shadow-xs"
-                            : item.status === "waiting_confirmation"
-                            ? "bg-blue-50/60 border-blue-200"
-                            : "bg-[#faf9f6] border-stone-200/60"
+                  <div className="flex gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+                    {["All", "Veg Starters", "Non Veg Starters", "Breads", "Rices/Noodles", "Biryanies", "Desserts"].map((cat) => (
+                      <button
+                        key={cat}
+                        onClick={() => setPosCategoryFilter(cat)}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap transition cursor-pointer ${
+                          posCategoryFilter === cat
+                            ? "bg-orange-600 text-white shadow-xs"
+                            : "bg-stone-100 text-stone-600 hover:bg-stone-200"
                         }`}
                       >
-                        <div className="flex justify-between items-start gap-2">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-1.5">
-                              <p className={`font-black text-xs leading-snug ${isOOS ? "text-rose-700 line-through" : "text-stone-900"}`}>{item.name}</p>
-                              {item.status === "waiting_confirmation" && (
-                                <span className="text-[8px] bg-blue-600 text-white px-1.5 py-0.5 rounded-md font-black uppercase">
-                                  New
-                                </span>
-                              )}
-                              {isOOS && (
-                                <span className="text-[8px] bg-rose-600 text-white px-1.5 py-0.5 rounded-md font-black uppercase">
+                        {cat}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Dishes List */}
+                <div className="flex-1 max-h-[46vh] overflow-y-auto py-2 space-y-2 pr-1">
+                  {menuItems
+                    .filter((item) => {
+                      const matchSearch = item.name.toLowerCase().includes(posSearch.toLowerCase());
+                      const matchCat = posCategoryFilter === "All" || item.category === posCategoryFilter;
+                      return matchSearch && matchCat;
+                    })
+                    .map((dish) => {
+                      const inCart = waiterCart.find((c) => c.id === dish.id);
+                      const qty = inCart?.quantity || 0;
+                      const isUnavailable = dish.isAvailable === false;
+
+                      return (
+                        <div
+                          key={dish.id}
+                          onClick={() => {
+                            if (!isUnavailable) addToWaiterCart(dish);
+                          }}
+                          className={`p-3 rounded-2xl border transition flex items-center justify-between gap-3 ${
+                            isUnavailable
+                              ? "bg-stone-50 border-stone-200 opacity-60 cursor-not-allowed"
+                              : qty > 0
+                              ? "bg-orange-50/50 border-orange-300 shadow-2xs cursor-pointer"
+                              : "bg-[#faf9f6] border-stone-200/80 hover:border-orange-300 cursor-pointer"
+                          }`}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <p className="font-black text-xs text-stone-900 truncate">{dish.name}</p>
+                              {isUnavailable && (
+                                <span className="text-[9px] bg-rose-100 text-rose-700 px-1.5 py-0.2 rounded font-bold">
                                   Out of Stock
                                 </span>
                               )}
                             </div>
-                            <p className={`text-[10px] font-bold uppercase mt-0.5 ${isOOS ? "text-rose-500" : "text-stone-400"}`}>
-                              {!isSelectedTableParcel && `Serve #${item.serve} • `}
-                              {isOOS ? "Kitchen Alert: Marked Out of Stock" : `Status: ${item.status.replace("_", " ")}`}
-                            </p>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <span className="text-[10px] font-bold text-stone-400 uppercase">{dish.category}</span>
+                              <span className="text-xs font-black text-orange-600">₹{dish.price}</span>
+                            </div>
                           </div>
 
-                      <div className="flex items-center gap-2">
-                        {/* Remove button for Out of Stock or Unconfirmed items */}
-                        {(isOOS || (!isModalBilled && (item.status === "waiting_confirmation" || item.status === "pending"))) && (
-                          <button
-                            onClick={async () => {
-                              try {
-                                await fetch(`${apiUrl}/admin/waiter/confirm-items`, {
-                                  method: "PATCH",
-                                  headers: { "Content-Type": "application/json" },
-                                  body: JSON.stringify({
-                                    items: [{ id: item.id, action: "delete" }],
-                                    tableNumber: selectedTable,
-                                  }),
-                                });
-                                setTableOrders((prev) => prev.filter((i) => i.id !== item.id));
-                                fetchFloorPlan();
-                              } catch (err) {}
-                            }}
-                            className={isOOS
-                              ? "bg-rose-100 hover:bg-rose-200 text-rose-700 px-2.5 py-1.5 rounded-xl text-xs font-black flex items-center gap-1 transition active:scale-95 cursor-pointer shadow-2xs border border-rose-200"
-                              : "text-stone-300 hover:text-rose-600 p-1 transition cursor-pointer"}
-                            title={isOOS ? "Remove Out of Stock item from order" : "Delete item"}
+                          <div
+                            className="flex items-center gap-1.5 shrink-0"
+                            onClick={(e) => e.stopPropagation()}
                           >
-                            <Trash2 size={isOOS ? 13 : 15} />
-                            {isOOS && <span>Remove</span>}
-                          </button>
-                        )}
-
-                        {!isModalBilled && item.status === "waiting_confirmation" ? (
-                          <div className="flex items-center bg-white rounded-xl border border-stone-200 p-0.5">
-                            <button
-                              onClick={() => handleQuantityChange(item.id, -1)}
-                              className="p-1 text-stone-600 hover:bg-stone-50 rounded"
-                            >
-                              <Minus size={12} />
-                            </button>
-                            <span className="w-5 text-center font-black text-xs">
-                              {item.quantity}
-                            </span>
-                            <button
-                              onClick={() => handleQuantityChange(item.id, 1)}
-                              className="p-1 text-stone-600 hover:bg-stone-50 rounded"
-                            >
-                              <Plus size={12} />
-                            </button>
+                            {qty > 0 ? (
+                              <div className="flex items-center bg-white rounded-xl border border-stone-200 p-0.5 shadow-2xs">
+                                <button
+                                  type="button"
+                                  onClick={() => updateWaiterCartQuantity(dish.id, -1)}
+                                  className="p-1 rounded-lg hover:bg-stone-100 text-stone-700 transition"
+                                >
+                                  <Minus size={13} />
+                                </button>
+                                <span className="w-6 text-center text-xs font-black text-stone-900">{qty}</span>
+                                <button
+                                  type="button"
+                                  disabled={isUnavailable}
+                                  onClick={() => updateWaiterCartQuantity(dish.id, 1)}
+                                  className="p-1 rounded-lg hover:bg-stone-100 text-stone-700 transition disabled:opacity-40"
+                                >
+                                  <Plus size={13} />
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                disabled={isUnavailable}
+                                onClick={() => addToWaiterCart(dish)}
+                                className={`px-3 py-1.5 rounded-xl text-xs font-black transition cursor-pointer ${
+                                  isUnavailable
+                                    ? "bg-stone-100 text-stone-400 cursor-not-allowed"
+                                    : "bg-stone-900 hover:bg-orange-600 text-white active:scale-95 shadow-2xs"
+                                }`}
+                              >
+                                + Add
+                              </button>
+                            )}
                           </div>
-                        ) : (
-                          <span className="bg-stone-100 text-stone-800 text-xs font-black px-2.5 py-1 rounded-xl">
-                            {item.quantity}×
-                          </span>
+                        </div>
+                      );
+                    })}
+                </div>
+
+                {/* Floating Cart & Action Bar */}
+                <div className="mt-3 pt-3 border-t border-stone-200 flex items-center justify-between gap-3">
+                  <div>
+                    <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block">
+                      Direct Order
+                    </span>
+                    <p className="text-sm font-black text-stone-900">
+                      {waiterCart.reduce((sum, i) => sum + i.quantity, 0)} items • ₹
+                      {waiterCart.reduce((sum, i) => sum + i.price * i.quantity, 0)}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsOrderingMode(false);
+                        setWaiterCart([]);
+                      }}
+                      className="px-3.5 py-2.5 rounded-xl text-xs font-bold bg-stone-100 hover:bg-stone-200 text-stone-700 transition cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSendToKitchen}
+                      disabled={waiterCart.length === 0 || isSubmittingPosOrder}
+                      className={`py-2.5 px-4 rounded-xl font-black text-xs uppercase tracking-wider transition shadow-md flex items-center gap-1.5 cursor-pointer ${
+                        waiterCart.length === 0 || isSubmittingPosOrder
+                          ? "bg-stone-200 text-stone-400 cursor-not-allowed shadow-none"
+                          : "bg-orange-600 hover:bg-orange-700 text-white shadow-orange-600/25 active:scale-95"
+                      }`}
+                    >
+                      <Utensils size={14} />
+                      <span>{isSubmittingPosOrder ? "Sending..." : "Send to Kitchen 🚀"}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div>
+                <div className="max-h-[50vh] overflow-y-auto space-y-3 pr-1">
+                  {/* Quick Remove All Out-of-Stock Banner */}
+                  {!isModalLoading && tableOrders.some((i) => i.status === "out_of_stock" || i.isOutOfStock) && (
+                    <div className="p-3 bg-rose-50 border border-rose-200 rounded-2xl flex items-center justify-between gap-2 shadow-2xs">
+                      <div className="flex items-center gap-2">
+                        <AlertTriangle size={15} className="text-rose-600 shrink-0" />
+                        <span className="text-xs font-bold text-rose-900 leading-tight">
+                          Kitchen flagged out-of-stock items on this table.
+                        </span>
+                      </div>
+                      <button
+                        onClick={async () => {
+                          const oosItems = tableOrders.filter((i) => i.status === "out_of_stock" || i.isOutOfStock);
+                          try {
+                            await fetch(`${apiUrl}/admin/waiter/confirm-items`, {
+                              method: "PATCH",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({
+                                items: oosItems.map((i) => ({ id: i.id, action: "delete" })),
+                                tableNumber: selectedTable,
+                              }),
+                            });
+                            const oosIds = new Set(oosItems.map((i) => i.id));
+                            setTableOrders((prev) => prev.filter((item) => !oosIds.has(item.id)));
+                            fetchFloorPlan();
+                          } catch (err) {}
+                        }}
+                        className="bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-black px-3 py-1.5 rounded-xl flex items-center gap-1 transition shrink-0 active:scale-95 shadow-xs cursor-pointer"
+                      >
+                        <Trash2 size={12} />
+                        <span>Remove All OOS</span>
+                      </button>
+                    </div>
+                  )}
+
+                  {isModalLoading ? (
+                    <div className="py-12 flex flex-col items-center text-stone-300">
+                      <ChefHat size={36} className="animate-bounce mb-2" />
+                      <p className="font-bold text-xs uppercase tracking-wider">Syncing table items...</p>
+                    </div>
+                  ) : tableOrders.length === 0 ? (
+                    <div className="py-10 text-center space-y-3">
+                      <p className="text-stone-400 text-xs font-bold uppercase">No active dishes</p>
+                      <div className="flex items-center justify-center gap-2">
+                        <button
+                          onClick={() => {
+                            setIsOrderingMode(true);
+                            fetchMenuItems();
+                          }}
+                          className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2.5 rounded-2xl text-xs font-black transition flex items-center gap-1.5 cursor-pointer shadow-md shadow-orange-600/20 active:scale-95"
+                        >
+                          <Plus size={14} /> + Take Order
+                        </button>
+                        {activeSessionId && (
+                          <button
+                            onClick={handleClearEmptyTable}
+                            className="text-rose-600 bg-rose-50 hover:bg-rose-100 px-4 py-2.5 rounded-2xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <Trash2 size={14} /> Clear Vacant
+                          </button>
                         )}
                       </div>
                     </div>
-                  </div>
-                    );
-                })
-              )}
-            </div>
+                  ) : (
+                    tableOrders.map((item) => {
+                      const isOOS = item.status === "out_of_stock" || item.isOutOfStock;
+                      return (
+                        <div
+                          key={item.id}
+                          className={`p-3.5 rounded-2xl border transition-colors ${
+                            isOOS
+                              ? "bg-rose-50 border-rose-300 shadow-xs"
+                              : item.status === "waiting_confirmation"
+                              ? "bg-blue-50/60 border-blue-200"
+                              : "bg-[#faf9f6] border-stone-200/60"
+                          }`}
+                        >
+                          <div className="flex justify-between items-start gap-2">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-1.5">
+                                <p className={`font-black text-xs leading-snug ${isOOS ? "text-rose-700 line-through" : "text-stone-900"}`}>{item.name}</p>
+                                {item.status === "waiting_confirmation" && (
+                                  <span className="text-[8px] bg-blue-600 text-white px-1.5 py-0.5 rounded-md font-black uppercase">
+                                    New
+                                  </span>
+                                )}
+                                {isOOS && (
+                                  <span className="text-[8px] bg-rose-600 text-white px-1.5 py-0.5 rounded-md font-black uppercase">
+                                    Out of Stock
+                                  </span>
+                                )}
+                              </div>
+                              <p className={`text-[10px] font-bold uppercase mt-0.5 ${isOOS ? "text-rose-500" : "text-stone-400"}`}>
+                                {!isSelectedTableParcel && `Serve #${item.serve} • `}
+                                {isOOS ? "Kitchen Alert: Marked Out of Stock" : `Status: ${item.status.replace("_", " ")}`}
+                              </p>
+                            </div>
 
-            {/* Modal Bottom Actions */}
-            <div className="mt-5 pt-3 border-t border-stone-100 space-y-2">
-              {hasItemsToConfirm && tableOrders.length > 0 && !isModalBilled && (
-                <button
-                  onClick={handleConfirmAndSend}
-                  className="w-full bg-stone-900 hover:bg-black text-white py-3.5 rounded-2xl font-black text-xs uppercase tracking-wider shadow-md transition active:scale-98 flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <span>Confirm & Send to Kitchen</span>
-                  <ChevronRight size={16} />
-                </button>
-              )}
+                            <div className="flex items-center gap-2">
+                              {/* Remove button for Out of Stock or Unconfirmed items */}
+                              {(isOOS || (!isModalBilled && (item.status === "waiting_confirmation" || item.status === "pending"))) && (
+                                <button
+                                  onClick={async () => {
+                                    try {
+                                      await fetch(`${apiUrl}/admin/waiter/confirm-items`, {
+                                        method: "PATCH",
+                                        headers: { "Content-Type": "application/json" },
+                                        body: JSON.stringify({
+                                          items: [{ id: item.id, action: "delete" }],
+                                          tableNumber: selectedTable,
+                                        }),
+                                      });
+                                      setTableOrders((prev) => prev.filter((i) => i.id !== item.id));
+                                      fetchFloorPlan();
+                                    } catch (err) {}
+                                  }}
+                                  className={isOOS
+                                    ? "bg-rose-100 hover:bg-rose-200 text-rose-700 px-2.5 py-1.5 rounded-xl text-xs font-black flex items-center gap-1 transition active:scale-95 cursor-pointer shadow-2xs border border-rose-200"
+                                    : "text-stone-300 hover:text-rose-600 p-1 transition cursor-pointer"}
+                                  title={isOOS ? "Remove Out of Stock item from order" : "Delete item"}
+                                >
+                                  <Trash2 size={isOOS ? 13 : 15} />
+                                  {isOOS && <span>Remove</span>}
+                                </button>
+                              )}
 
-              {isModalBilled ? (
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setSelectedTable(null)}
-                    className="w-1/3 bg-stone-100 text-stone-700 py-3 rounded-2xl font-bold text-xs hover:bg-stone-200 transition"
-                  >
-                    Back
-                  </button>
-                  <div className="w-2/3 bg-emerald-100 border border-emerald-300 text-emerald-800 py-3 px-4 rounded-2xl font-black text-xs flex items-center justify-center gap-1.5 shadow-2xs">
-                    <CheckCircle2 size={16} className="text-emerald-600" />
-                    <span>{modalBilledMethod ? `Billed (${modalBilledMethod.toUpperCase()})` : "Bill Requested"}</span>
-                  </div>
+                              {!isModalBilled && item.status === "waiting_confirmation" ? (
+                                <div className="flex items-center bg-white rounded-xl border border-stone-200 p-0.5">
+                                  <button
+                                    onClick={() => handleQuantityChange(item.id, -1)}
+                                    className="p-1 text-stone-600 hover:bg-stone-50 rounded"
+                                  >
+                                    <Minus size={12} />
+                                  </button>
+                                  <span className="w-5 text-center font-black text-xs">
+                                    {item.quantity}
+                                  </span>
+                                  <button
+                                    onClick={() => handleQuantityChange(item.id, 1)}
+                                    className="p-1 text-stone-600 hover:bg-stone-50 rounded"
+                                  >
+                                    <Plus size={12} />
+                                  </button>
+                                </div>
+                              ) : (
+                                <span className="bg-stone-100 text-stone-800 text-xs font-black px-2.5 py-1 rounded-xl">
+                                  {item.quantity}×
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
                 </div>
-              ) : tableOrders.length > 0 && !hasItemsToConfirm ? (
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setSelectedTable(null)}
-                    className="w-1/3 bg-stone-100 text-stone-700 py-3 rounded-2xl font-bold text-xs hover:bg-stone-200 transition"
-                  >
-                    Back
-                  </button>
-                  <button
-                    onClick={() => setShowPaymentModal(true)}
-                    className="w-2/3 bg-orange-600 hover:bg-orange-700 text-white py-3 rounded-2xl font-black text-xs shadow-md shadow-orange-600/20 flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 transition"
-                  >
-                    <Receipt size={16} />
-                    <span>Request Bill</span>
-                  </button>
+
+                {/* Modal Bottom Actions */}
+                <div className="mt-5 pt-3 border-t border-stone-100 space-y-2">
+                  {hasItemsToConfirm && tableOrders.length > 0 && !isModalBilled && (
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => {
+                          setIsOrderingMode(true);
+                          fetchMenuItems();
+                        }}
+                        className="w-1/3 bg-stone-100 hover:bg-stone-200 text-stone-800 py-3.5 rounded-2xl font-black text-xs flex items-center justify-center gap-1.5 transition active:scale-98 cursor-pointer"
+                      >
+                        <Plus size={14} />
+                        <span>+ Add</span>
+                      </button>
+                      <button
+                        onClick={handleConfirmAndSend}
+                        className="w-2/3 bg-stone-900 hover:bg-black text-white py-3.5 rounded-2xl font-black text-xs uppercase tracking-wider shadow-md transition active:scale-98 flex items-center justify-center gap-2 cursor-pointer"
+                      >
+                        <span>Confirm & Send</span>
+                        <ChevronRight size={16} />
+                      </button>
+                    </div>
+                  )}
+
+                  {isModalBilled ? (
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => {
+                          setSelectedTable(null);
+                          setIsOrderingMode(false);
+                          setWaiterCart([]);
+                        }}
+                        className="w-1/3 bg-stone-100 text-stone-700 py-3 rounded-2xl font-bold text-xs hover:bg-stone-200 transition"
+                      >
+                        Back
+                      </button>
+                      <div className="w-2/3 bg-emerald-100 border border-emerald-300 text-emerald-800 py-3 px-4 rounded-2xl font-black text-xs flex items-center justify-center gap-1.5 shadow-2xs">
+                        <CheckCircle2 size={16} className="text-emerald-600" />
+                        <span>{modalBilledMethod ? `Billed (${modalBilledMethod.toUpperCase()})` : "Bill Requested"}</span>
+                      </div>
+                    </div>
+                  ) : tableOrders.length > 0 && !hasItemsToConfirm ? (
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => {
+                          setSelectedTable(null);
+                          setIsOrderingMode(false);
+                          setWaiterCart([]);
+                        }}
+                        className="w-1/4 bg-stone-100 text-stone-700 py-3 rounded-2xl font-bold text-xs hover:bg-stone-200 transition cursor-pointer"
+                      >
+                        Back
+                      </button>
+                      <button
+                        onClick={() => {
+                          setIsOrderingMode(true);
+                          fetchMenuItems();
+                        }}
+                        className="w-2/5 bg-stone-900 hover:bg-black text-white py-3 rounded-2xl font-black text-xs flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 transition"
+                      >
+                        <Plus size={15} />
+                        <span>+ Take Order</span>
+                      </button>
+                      <button
+                        onClick={() => setShowPaymentModal(true)}
+                        className="w-2/5 bg-orange-600 hover:bg-orange-700 text-white py-3 rounded-2xl font-black text-xs shadow-md shadow-orange-600/20 flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 transition"
+                      >
+                        <Receipt size={16} />
+                        <span>Request Bill</span>
+                      </button>
+                    </div>
+                  ) : tableOrders.length === 0 ? (
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => {
+                          setSelectedTable(null);
+                          setIsOrderingMode(false);
+                          setWaiterCart([]);
+                        }}
+                        className="w-1/3 bg-stone-100 text-stone-700 py-3 rounded-2xl font-bold text-xs hover:bg-stone-200 transition"
+                      >
+                        Back
+                      </button>
+                      <button
+                        onClick={() => {
+                          setIsOrderingMode(true);
+                          fetchMenuItems();
+                        }}
+                        className="w-2/3 bg-orange-600 hover:bg-orange-700 text-white py-3 rounded-2xl font-black text-xs shadow-md shadow-orange-600/20 flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 transition"
+                      >
+                        <Plus size={16} />
+                        <span>+ Take Order</span>
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
-              ) : null}
-            </div>
+              </div>
+            )}
 
           </div>
         </div>

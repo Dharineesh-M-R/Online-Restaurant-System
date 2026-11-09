@@ -657,7 +657,140 @@ router.post("/create-sub-tab", async (req, res) => {
   }
 });
 
-// 10. Waiter Mini-POS: Punch order directly for a session
+// 10. Waiter manually places an order on behalf of the customer (Mini-POS Fast-Entry)
+router.post("/place-order", async (req, res) => {
+  const { tableNumber, sessionId: passedSessionId, waiterId, items } = req.body;
+
+  if (!tableNumber || !items || !Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ error: "tableNumber and items are required" });
+  }
+
+  try {
+    // 1. Find the active session for this table (support passed sessionId for sub-tabs)
+    let session = null;
+    if (passedSessionId) {
+      const { data: s } = await supabase
+        .from("table_sessions")
+        .select("session_id")
+        .eq("session_id", passedSessionId)
+        .neq("status", "completed")
+        .neq("status", "cancelled")
+        .maybeSingle();
+      session = s;
+    }
+
+    if (!session) {
+      const { data: activeSession } = await supabase
+        .from("table_sessions")
+        .select("session_id")
+        .eq("table_number", Number(tableNumber))
+        .neq("status", "completed")
+        .neq("status", "cancelled")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      session = activeSession;
+    }
+
+    // Auto-create session if the table was completely empty
+    if (!session) {
+      const newSessionId = `sess_${Date.now()}_w${tableNumber}`;
+      await supabase.from("table_sessions").insert([
+        {
+          session_id: newSessionId,
+          table_number: Number(tableNumber),
+          assigned_waiter_id: waiterId || null,
+          status: "active",
+          cart_items: [],
+          tab_name: "Main"
+        }
+      ]);
+      session = { session_id: newSessionId };
+    }
+
+    // Ensure physical table is marked occupied
+    const { data: tableData } = await supabase
+      .from("tables")
+      .select("id")
+      .eq("table_number", Number(tableNumber))
+      .maybeSingle();
+
+    if (tableData) {
+      await supabase
+        .from("tables")
+        .update({ status: "occupied" })
+        .eq("id", tableData.id);
+    }
+
+    // 2. Find or Create the Order
+    let { data: order } = await supabase
+      .from("orders")
+      .select("id, serve_count, total_amount, waiter_id")
+      .eq("session_id", session.session_id)
+      .neq("order_status", "completed")
+      .neq("order_status", "cancelled")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const orderTotal = items.reduce((sum, item) => sum + (Number(item.price || 0) * Number(item.quantity || 1)), 0);
+    let orderId;
+    let newServeCount = 1;
+
+    if (order) {
+      orderId = order.id;
+      newServeCount = (order.serve_count || 1) + 1;
+      // Update existing order total and serve count
+      await supabase.from("orders").update({
+        total_amount: Number(order.total_amount || 0) + orderTotal,
+        serve_count: newServeCount,
+        waiter_id: waiterId || order.waiter_id
+      }).eq("id", orderId);
+    } else {
+      // Create new order
+      const { data: newOrder, error: newOrderErr } = await supabase.from("orders").insert([{
+        table_id: tableData?.id,
+        session_id: session.session_id,
+        waiter_id: waiterId || null,
+        total_amount: orderTotal,
+        serve_count: 1,
+        order_status: "preparing"
+      }]).select("id").single();
+
+      if (newOrderErr) throw newOrderErr;
+      orderId = newOrder.id;
+    }
+
+    // 3. Create the Serve Round
+    const { data: serve, error: serveErr } = await supabase.from("order_serves").insert([{
+      order_id: orderId,
+      serve_number: newServeCount,
+      status: "preparing"
+    }]).select("id").single();
+
+    if (serveErr) throw serveErr;
+
+    // 4. Insert items DIRECTLY as 'pending' (Skipping 'waiting_confirmation')
+    const orderItems = items.map(item => ({
+      menu_item_id: item.menuItemId || item.id,
+      quantity: item.quantity,
+      price: item.price,
+      notes: item.notes || "",
+      serve_id: serve.id,
+      status: "pending" // <-- Straight to kitchen!
+    }));
+
+    const { error: itemsErr } = await supabase.from("order_items").insert(orderItems);
+    if (itemsErr) throw itemsErr;
+
+    res.json({ success: true, sessionId: session.session_id, message: "Order sent to kitchen!" });
+  } catch (err) {
+    console.error("Waiter Order Error:", err);
+    res.status(500).json({ error: "Failed to place order" });
+  }
+});
+
+// 11. Waiter Mini-POS: Punch order directly for a session
 router.post("/punch-order", async (req, res) => {
   const { sessionId, tableNumber, waiterId, items } = req.body;
   if (!sessionId || !items || !Array.isArray(items) || items.length === 0) {
