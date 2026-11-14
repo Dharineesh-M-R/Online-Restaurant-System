@@ -222,6 +222,24 @@ router.post("/checkout", async (req, res) => {
       .update({ status: "completed" })
       .eq("session_id", sessionId);
 
+    // D. Free the physical table if no other active sessions/sub-tabs remain for this table
+    if (tableNumber) {
+      const { data: remainingSessions } = await supabase
+        .from("table_sessions")
+        .select("session_id")
+        .eq("table_number", Number(tableNumber))
+        .neq("session_id", sessionId)
+        .neq("status", "completed")
+        .neq("status", "cancelled");
+
+      if (!remainingSessions || remainingSessions.length === 0) {
+        await supabase
+          .from("tables")
+          .update({ status: "available" })
+          .eq("table_number", Number(tableNumber));
+      }
+    }
+
     res.json({ success: true, message: "Payment successful. Table is now available." });
   } catch (err) {
     console.error("Checkout Error:", err);

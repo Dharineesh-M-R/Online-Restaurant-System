@@ -18,9 +18,11 @@ import Link from "next/link";
 
 import BillingHistory from "./components/BillingHistory";
 import MenuEditor from "./components/MenuEditor";
+import OverviewMetrics from "./components/OverviewMetrics";
+import StaffRoster from "./components/StaffRoster";
 
 export default function ManagementDashboard() {
-  const [activeTab, setActiveTab] = useState("billing");
+  const [activeTab, setActiveTab] = useState("dashboard");
   const [isAuthorized, setIsAuthorized] = useState(false);
   const router = useRouter();
 
@@ -133,16 +135,32 @@ export default function ManagementDashboard() {
           <div>
             <div className="flex items-center gap-2">
               <h2 className="text-xl font-black text-stone-900 capitalize tracking-tight">
-                {activeTab === "billing" ? "Billing History & Financials" : activeTab === "menu" ? "Menu Item Catalog" : activeTab}
+                {activeTab === "dashboard"
+                  ? "Overview Metrics & Real-Time Pulse"
+                  : activeTab === "billing"
+                  ? "Billing History & Financials"
+                  : activeTab === "menu"
+                  ? "Menu Item Catalog"
+                  : activeTab === "staff"
+                  ? "Staff Roster & Scheduling Hub"
+                  : activeTab}
               </h2>
             </div>
             <p className="text-xs text-stone-400 font-medium">
-              Real-time enterprise overview and menu management
+              Real-time enterprise overview and operational management
             </p>
           </div>
 
           {/* Mobile Tab Pills */}
           <div className="flex md:hidden gap-1 bg-stone-100 p-1 rounded-xl">
+            <button
+              onClick={() => setActiveTab("dashboard")}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold ${
+                activeTab === "dashboard" ? "bg-white text-stone-900 shadow-xs" : "text-stone-600"
+              }`}
+            >
+              Overview
+            </button>
             <button
               onClick={() => setActiveTab("billing")}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold ${
@@ -159,15 +177,25 @@ export default function ManagementDashboard() {
             >
               Menu
             </button>
+            <button
+              onClick={() => setActiveTab("staff")}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold ${
+                activeTab === "staff" ? "bg-white text-stone-900 shadow-xs" : "text-stone-600"
+              }`}
+            >
+              Staff
+            </button>
           </div>
         </header>
 
         {/* Tab Body */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
+          {activeTab === "dashboard" && <OverviewMetrics />}
           {activeTab === "billing" && <BillingHistory />}
           {activeTab === "menu" && <MenuEditor />}
+          {activeTab === "staff" && <StaffRoster />}
 
-          {activeTab !== "billing" && activeTab !== "menu" && (
+          {activeTab !== "dashboard" && activeTab !== "billing" && activeTab !== "menu" && activeTab !== "staff" && (
             <div className="h-full flex flex-col items-center justify-center text-center p-8">
               <div className="w-16 h-16 rounded-3xl bg-stone-100 flex items-center justify-center text-stone-400 mb-4">
                 <LayoutDashboard size={32} />

@@ -1,0 +1,226 @@
+{
+  "staff": [
+    {
+      "id": "f1a2b3c4-3333-4000-8000-000000000001",
+      "employee_id": "BIL001",
+      "name": "Priya Sharma",
+      "role": "billing",
+      "pin": "3333",
+      "phone": "98765-43230",
+      "hourly_wage": 140,
+      "status": "active"
+    }
+  ],
+  "shifts": [
+    {
+      "id": "sh_1794611048020_wmay",
+      "staffId": "WAI001",
+      "staffName": "John (Waiter)",
+      "role": "waiter",
+      "date": "2026-11-13",
+      "shiftType": "Full Day",
+      "startTime": "10:00",
+      "endTime": "21:00",
+      "stationOrZone": "Tables 1-6 (Front Area)",
+      "breakMinutes": 60,
+      "hours": 11
+    },
+    {
+      "id": "sh_1794611058644_osxk",
+      "staffId": "CHF001",
+      "staffName": "Gordon (Chef)",
+      "role": "kitchen",
+      "date": "2026-11-13",
+      "shiftType": "Full Day",
+      "startTime": "10:00",
+      "endTime": "21:00",
+      "stationOrZone": "Curries & Expo Station",
+      "breakMinutes": 60,
+      "hours": 11
+    },
+    {
+      "id": "sh_1794611066576_jsf0",
+      "staffId": "BIL001",
+      "staffName": "Sarah (Cashier)",
+      "role": "billing",
+      "date": "2026-11-13",
+      "shiftType": "Full Day",
+      "startTime": "10:00",
+      "endTime": "21:00",
+      "stationOrZone": "Front Billing Desk",
+      "breakMinutes": 60,
+      "hours": 11
+    },
+    {
+      "id": "sh_1794611082246_ipds",
+      "staffId": "ADM123",
+      "staffName": "Manager",
+      "role": "billing",
+      "date": "2026-11-13",
+      "shiftType": "Full Day",
+      "startTime": "10:00",
+      "endTime": "21:00",
+      "stationOrZone": "Front Billing Desk",
+      "breakMinutes": 60,
+      "hours": 11
+    }
+  ],
+  "leaves": [
+    {
+      "id": "lv_201",
+      "staffId": "WTR003",
+      "staffName": "Rohit Gupta",
+      "role": "waiter",
+      "startDate": "2026-11-13",
+      "endDate": "2026-11-13",
+      "reason": "Student University Semester Exam",
+      "status": "approved",
+      "appliedAt": "2026-11-11T22:58:46.452Z"
+    },
+    {
+      "id": "lv_202",
+      "staffId": "CK003",
+      "staffName": "Chef Karan Malhotra",
+      "role": "kitchen",
+      "startDate": "2026-11-15",
+      "endDate": "2026-11-16",
+      "reason": "Family Wedding Ceremony",
+      "status": "denied",
+      "appliedAt": "2026-11-13T17:58:46.452Z"
+    }
+  ],
+  "attendance": [
+    {
+      "id": "att_301",
+      "staffId": "WTR001",
+      "staffName": "Rahul Verma",
+      "role": "waiter",
+      "date": "2026-11-13",
+      "clockIn": "08:58",
+      "clockOut": null,
+      "status": "clocked_in",
+      "loggedHours": 5.2
+    },
+    {
+      "id": "att_302",
+      "staffId": "CK001",
+      "staffName": "Chef Vikram Singh",
+      "role": "kitchen",
+      "date": "2026-11-13",
+      "clockIn": "08:52",
+      "clockOut": null,
+      "status": "clocked_in",
+      "loggedHours": 5.3
+    },
+    {
+      "id": "att_303",
+      "staffId": "BIL001",
+      "staffName": "Priya Sharma",
+      "role": "billing",
+      "date": "2026-11-13",
+      "clockIn": "05:29",
+      "clockOut": null,
+      "status": "clocked_in",
+      "loggedHours": 0
+    },
+    {
+      "id": "att_304",
+      "staffId": "WTR002",
+      "staffName": "Amit Kumar",
+      "role": "waiter",
+      "date": "2026-11-13",
+      "clockIn": null,
+      "clockOut": null,
+      "status": "scheduled",
+      "loggedHours": 0
+    },
+    {
+      "id": "att_1794611320511",
+      "staffId": "CHF001",
+      "staffName": "CHF001",
+      "role": "waiter",
+      "date": "2026-11-13",
+      "clockIn": "05:29",
+      "clockOut": null,
+      "status": "clocked_in",
+      "loggedHours": 0
+    },
+    {
+      "id": "att_1794611329360",
+      "staffId": "WAI001",
+      "staffName": "WAI001",
+      "role": "waiter",
+      "date": "2026-11-13",
+      "clockIn": "05:29",
+      "clockOut": null,
+      "status": "clocked_in",
+      "loggedHours": 0,
+      "breakMinutes": 0
+    },
+    {
+      "id": "att_1794614403898",
+      "staffId": "WAI001",
+      "staffName": "WAI001",
+      "role": "waiter",
+      "date": "2026-11-14",
+      "clockIn": "05:47",
+      "clockOut": null,
+      "breakMinutes": 0,
+      "status": "clocked_in",
+      "loggedHours": 0,
+      "loggedMinutes": 0
+    },
+    {
+      "id": "att_1794614405970",
+      "staffId": "CHF001",
+      "staffName": "CHF001",
+      "role": "waiter",
+      "date": "2026-11-14",
+      "clockIn": "05:47",
+      "clockOut": null,
+      "breakMinutes": 0,
+      "status": "clocked_in",
+      "loggedHours": 0,
+      "loggedMinutes": 0
+    },
+    {
+      "id": "att_1794614407941",
+      "staffId": "BIL001",
+      "staffName": "Priya Sharma",
+      "role": "billing",
+      "date": "2026-11-14",
+      "clockIn": "05:47",
+      "clockOut": null,
+      "breakMinutes": 0,
+      "status": "clocked_in",
+      "loggedHours": 0,
+      "loggedMinutes": 0
+    }
+  ],
+  "swaps": [
+    {
+      "id": "sw_1794611376520",
+      "requesterId": "WAI001",
+      "requesterName": "John (Waiter)",
+      "targetId": "CHF001",
+      "targetName": "Gordon (Chef)",
+      "shiftDate": "2026-11-26",
+      "shiftType": "Evening Shift (16:00 - 23:00)",
+      "reason": "SAFDSADF",
+      "status": "denied",
+      "createdAt": "2026-11-13T23:09:36.520Z"
+    },
+    {
+      "id": "sw_401",
+      "requesterId": "WTR002",
+      "requesterName": "Amit Kumar",
+      "targetId": "WTR003",
+      "targetName": "Rohit Gupta",
+      "shiftDate": "2026-11-14",
+      "shiftType": "Evening Shift (16:00 - 23:00)",
+      "reason": "Personal urgent medical checkup appointment",
+      "status": "denied",
+      "createdAt": "2026-11-13T22:58:46.452Z"
+    }
+  ]
+}
