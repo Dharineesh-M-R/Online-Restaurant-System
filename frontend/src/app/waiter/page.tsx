@@ -53,7 +53,8 @@ interface TableStatus {
   number: number;
   isOccupied: boolean;
   sharedPartiesCount?: number;
-  activeTabs?: { sessionId: string; tabName: string; status: string }[];
+  sessionCreatedAt?: string | null;
+  activeTabs?: { sessionId: string; tabName: string; status: string; createdAt?: string | null }[];
   needsHelp: boolean;
   hasUnconfirmed: boolean;
   hasOutOfStock?: boolean;
@@ -80,7 +81,42 @@ interface TabInfo {
   sessionId: string;
   tabName: string;
   status: string;
+  createdAt?: string | null;
   assignedWaiter?: { id: string; name: string; employeeId: string } | null;
+}
+
+function getSessionStartTime(createdAt?: string | null, sessionId?: string | null): number | null {
+  if (createdAt) {
+    const t = new Date(createdAt).getTime();
+    if (!isNaN(t) && t > 0) return t;
+  }
+  if (sessionId && sessionId.startsWith("sess_")) {
+    const parts = sessionId.split("_");
+    const ts = parseInt(parts[1], 10);
+    if (!isNaN(ts) && ts > 1000000000000) return ts;
+  }
+  return null;
+}
+
+function formatSessionDuration(createdAt?: string | null, sessionId?: string | null): string {
+  const startTime = getSessionStartTime(createdAt, sessionId);
+  if (!startTime) return "—";
+  const diffMs = Math.max(0, Date.now() - startTime);
+  const totalMinutes = Math.floor(diffMs / 60000);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+
+  if (hours === 0) {
+    return totalMinutes === 0 ? "< 1m" : `${totalMinutes}m`;
+  }
+  return `${hours}h ${minutes}m`;
+}
+
+function formatSessionStartTime(createdAt?: string | null, sessionId?: string | null): string {
+  const startTime = getSessionStartTime(createdAt, sessionId);
+  if (!startTime) return "";
+  const d = new Date(startTime);
+  return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
 
 export default function WaiterDashboard() {
@@ -88,10 +124,12 @@ export default function WaiterDashboard() {
   const [readyItems, setReadyItems] = useState<ReadyItem[]>([]);
   const [floorTables, setFloorTables] = useState<TableStatus[]>([]);
   const [loading, setLoading] = useState(true);
+  const [, setTick] = useState(0);
 
   const [selectedTable, setSelectedTable] = useState<number | null>(null);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [activeSessionStatus, setActiveSessionStatus] = useState<string | null>(null);
+  const [activeSessionCreatedAt, setActiveSessionCreatedAt] = useState<string | null>(null);
   const [activeTabName, setActiveTabName] = useState<string>("Main");
   const [availableTabs, setAvailableTabs] = useState<TabInfo[]>([]);
   const [selectedTableWaiter, setSelectedTableWaiter] = useState<{ id: string; name: string; employeeId: string } | null>(null);
@@ -182,6 +220,7 @@ export default function WaiterDashboard() {
       setTableOrders([]);
       setActiveSessionId(null);
       setActiveSessionStatus(null);
+      setActiveSessionCreatedAt(null);
       setActiveTabName("Main");
       setAvailableTabs([]);
       setSelectedTableWaiter(null);
@@ -200,6 +239,7 @@ export default function WaiterDashboard() {
         setTableOrders(data.items);
         setActiveSessionId(data.sessionId);
         setActiveSessionStatus(data.sessionStatus);
+        setActiveSessionCreatedAt(data.sessionCreatedAt || null);
         setActiveTabName(data.tabName || "Main");
         setAvailableTabs(data.availableTabs || []);
         setSelectedTableWaiter(data.assignedWaiter || null);
@@ -222,6 +262,7 @@ export default function WaiterDashboard() {
           const data = await res.json();
           setActiveSessionId(data.sessionId);
           setActiveSessionStatus(data.sessionStatus);
+          setActiveSessionCreatedAt(data.sessionCreatedAt || null);
           setActiveTabName(data.tabName || "Main");
           setAvailableTabs(data.availableTabs || []);
           setSelectedTableWaiter(data.assignedWaiter || null);
@@ -378,7 +419,11 @@ export default function WaiterDashboard() {
       fetchTasks();
       fetchFloorPlan();
     }, 3000);
-    return () => clearInterval(interval);
+    const tickInterval = setInterval(() => setTick((v) => v + 1), 10000);
+    return () => {
+      clearInterval(interval);
+      clearInterval(tickInterval);
+    };
   }, [fetchTasks, fetchFloorPlan]);
 
   // Audio Notification Triggers (New Orders, Ready Runner Tasks, Bill Requests)
@@ -865,36 +910,58 @@ export default function WaiterDashboard() {
                     )}
 
                     {isParcel ? (
-                      <ShoppingBag
-                        size={22}
-                        className={
-                          table.hasUnconfirmed
-                            ? "text-blue-600 my-auto"
-                            : isBilled
-                            ? "text-rose-600 my-auto"
-                            : table.needsHelp
-                            ? "text-rose-600 my-auto"
-                            : table.isOccupied
-                            ? "text-purple-600 my-auto"
-                            : "text-stone-300 my-auto"
-                        }
-                      />
+                      <div className="flex flex-col items-center my-auto">
+                        <ShoppingBag
+                          size={22}
+                          className={
+                            table.hasUnconfirmed
+                              ? "text-blue-600"
+                              : isBilled
+                              ? "text-rose-600"
+                              : table.needsHelp
+                              ? "text-rose-600"
+                              : table.isOccupied
+                              ? "text-purple-600"
+                              : "text-stone-300"
+                          }
+                        />
+                        {table.isOccupied && (
+                          <div
+                            className="flex items-center gap-0.5 text-[8px] font-black text-amber-900 bg-amber-50/90 border border-amber-200/80 px-1 py-0.2 rounded mt-1 shadow-2xs"
+                            title={`Session open for ${formatSessionDuration(table.sessionCreatedAt, table.activeTabs?.[0]?.sessionId)}`}
+                          >
+                            <Clock size={8} className="text-amber-600 shrink-0" />
+                            <span>{formatSessionDuration(table.sessionCreatedAt, table.activeTabs?.[0]?.sessionId)}</span>
+                          </div>
+                        )}
+                      </div>
                     ) : (
-                      <span
-                        className={`text-2xl font-black my-auto ${
-                          table.hasUnconfirmed
-                            ? "text-blue-600"
-                            : isBilled
-                            ? "text-rose-600"
-                            : table.needsHelp
-                            ? "text-rose-600"
-                            : table.isOccupied
-                            ? "text-stone-900"
-                            : "text-stone-300"
-                        }`}
-                      >
-                        {table.number}
-                      </span>
+                      <div className="flex flex-col items-center my-auto">
+                        <span
+                          className={`text-2xl font-black leading-none ${
+                            table.hasUnconfirmed
+                              ? "text-blue-600"
+                              : isBilled
+                              ? "text-rose-600"
+                              : table.needsHelp
+                              ? "text-rose-600"
+                              : table.isOccupied
+                              ? "text-stone-900"
+                              : "text-stone-300"
+                          }`}
+                        >
+                          {table.number}
+                        </span>
+                        {table.isOccupied && (
+                          <div
+                            className="flex items-center gap-0.5 text-[8px] font-black text-amber-900 bg-amber-50/90 border border-amber-200/80 px-1 py-0.2 rounded mt-1 shadow-2xs"
+                            title={`Table session open for ${formatSessionDuration(table.sessionCreatedAt, table.activeTabs?.[0]?.sessionId)}`}
+                          >
+                            <Clock size={8} className="text-amber-600 shrink-0" />
+                            <span>{formatSessionDuration(table.sessionCreatedAt, table.activeTabs?.[0]?.sessionId)}</span>
+                          </div>
+                        )}
+                      </div>
                     )}
 
                     {table.needsHelp ? (
@@ -943,11 +1010,24 @@ export default function WaiterDashboard() {
             
             <div className="flex justify-between items-start mb-4 pb-3 border-b border-stone-100">
               <div>
-                <h2 className="text-2xl font-black text-stone-900 leading-tight">
-                  {isSelectedTableParcel
-                    ? `Parcel #${selectedTable - 100}`
-                    : `Table #${selectedTable}`}
-                </h2>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-2xl font-black text-stone-900 leading-tight">
+                    {isSelectedTableParcel
+                      ? `Parcel #${selectedTable - 100}`
+                      : `Table #${selectedTable}`}
+                  </h2>
+                  {Boolean(activeSessionId) && (
+                    <span className="text-[10px] font-black text-amber-900 bg-amber-50 border border-amber-200/90 px-2 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
+                      <Clock size={11} className="text-amber-600 shrink-0" />
+                      <span>
+                        Open for {formatSessionDuration(activeSessionCreatedAt, activeSessionId)}
+                        {formatSessionStartTime(activeSessionCreatedAt, activeSessionId)
+                          ? ` (since ${formatSessionStartTime(activeSessionCreatedAt, activeSessionId)})`
+                          : ""}
+                      </span>
+                    </span>
+                  )}
+                </div>
                 <div className="flex items-center gap-2 mt-0.5">
                   <p className={`text-[10px] font-bold uppercase tracking-widest ${
                     isOrderingMode
@@ -995,6 +1075,7 @@ export default function WaiterDashboard() {
                   <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
                     {availableTabs.map((tab) => {
                       const isActive = tab.sessionId === activeSessionId;
+                      const tabDuration = formatSessionDuration(tab.createdAt, tab.sessionId);
                       return (
                         <button
                           key={tab.sessionId}
@@ -1007,6 +1088,17 @@ export default function WaiterDashboard() {
                         >
                           <Users size={12} />
                           <span>{tab.tabName}</span>
+                          {tabDuration !== "—" && (
+                            <span
+                              className={`text-[9px] px-1.5 py-0.2 rounded-md font-bold ${
+                                isActive
+                                  ? "bg-purple-800/80 text-purple-200"
+                                  : "bg-stone-200 text-stone-600"
+                              }`}
+                            >
+                              {tabDuration}
+                            </span>
+                          )}
                         </button>
                       );
                     })}

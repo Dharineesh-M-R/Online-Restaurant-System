@@ -81,7 +81,7 @@ export default function ManagementDashboard() {
               { id: "billing", icon: Receipt, label: "Billing & Revenue" },
               { id: "menu", icon: UtensilsCrossed, label: "Menu Catalog" },
               { id: "dashboard", icon: LayoutDashboard, label: "Overview Metrics" },
-              { id: "staff", icon: Users, label: "Staff Roster" },
+              { id: "staff", icon: Users, label: "Staff Roster & Scheduling Hub" },
               { id: "reviews", icon: Star, label: "Guest Feedback" },
             ].map((item) => {
               const Icon = item.icon;

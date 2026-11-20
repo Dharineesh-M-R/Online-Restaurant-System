@@ -622,6 +622,14 @@ router.post("/staff", async (req, res) => {
             name: cleanName,
             role: dbRole,
             pin: generatedPin,
+            wage_type: req.body.wage_type || "monthly",
+            base_rate: req.body.base_rate !== undefined ? Number(req.body.base_rate) : (hourly_wage !== undefined ? Number(hourly_wage) : 0),
+            standard_shift_hours: req.body.standard_shift_hours !== undefined ? Number(req.body.standard_shift_hours) : 9,
+            half_day_cutoff_hours: req.body.half_day_cutoff_hours !== undefined ? Number(req.body.half_day_cutoff_hours) : 5,
+            overtime_hourly_rate: req.body.overtime_hourly_rate !== undefined ? Number(req.body.overtime_hourly_rate) : 0,
+            paid_weekly_offs_per_month: req.body.paid_weekly_offs_per_month !== undefined ? Number(req.body.paid_weekly_offs_per_month) : 4,
+            default_break_hours: req.body.default_break_hours !== undefined ? Number(req.body.default_break_hours) : 2,
+            is_active: true,
           },
         ])
         .select();
@@ -640,6 +648,14 @@ router.post("/staff", async (req, res) => {
                 name: cleanName,
                 role: dbRole,
                 pin: generatedPin,
+                wage_type: req.body.wage_type || "monthly",
+                base_rate: req.body.base_rate !== undefined ? Number(req.body.base_rate) : (hourly_wage !== undefined ? Number(hourly_wage) : 0),
+                standard_shift_hours: req.body.standard_shift_hours !== undefined ? Number(req.body.standard_shift_hours) : 9,
+                half_day_cutoff_hours: req.body.half_day_cutoff_hours !== undefined ? Number(req.body.half_day_cutoff_hours) : 5,
+                overtime_hourly_rate: req.body.overtime_hourly_rate !== undefined ? Number(req.body.overtime_hourly_rate) : 0,
+                paid_weekly_offs_per_month: req.body.paid_weekly_offs_per_month !== undefined ? Number(req.body.paid_weekly_offs_per_month) : 4,
+                default_break_hours: req.body.default_break_hours !== undefined ? Number(req.body.default_break_hours) : 2,
+                is_active: true,
               },
             ])
             .select();

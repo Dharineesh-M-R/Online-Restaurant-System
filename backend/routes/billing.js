@@ -19,6 +19,7 @@ router.get("/tables", async (req, res) => {
           session_id,
           status,
           tab_name,
+          created_at,
           assigned_waiter_id,
           staff:assigned_waiter_id ( id, name, employee_id ),
           orders (
@@ -52,6 +53,7 @@ router.get("/tables", async (req, res) => {
             session_id,
             status,
             tab_name,
+            created_at,
             orders (
               id,
               order_serves (
@@ -158,6 +160,11 @@ router.get("/tables", async (req, res) => {
             paymentMethod = activeSession.status.split("_")[1];
           }
 
+          const sessionCreatedAt = activeSession.created_at ||
+            (activeSession.session_id?.startsWith("sess_")
+              ? new Date(parseInt(activeSession.session_id.split("_")[1], 10)).toISOString()
+              : null);
+
           formattedTables.push({
             id: activeSession.session_id, // unique per sub-tab session
             tableId: t.id,
@@ -167,6 +174,7 @@ router.get("/tables", async (req, res) => {
             status: isBilled ? "Billed" : "Occupied",
             paymentMethod: paymentMethod,
             sessionId: activeSession.session_id,
+            sessionCreatedAt: sessionCreatedAt,
             orderId: orderId,
             itemTotal: dynamicTotal,
             waiterName: assignedWaiter,

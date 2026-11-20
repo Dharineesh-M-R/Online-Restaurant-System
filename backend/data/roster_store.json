@@ -9,6 +9,16 @@
       "phone": "98765-43230",
       "hourly_wage": 140,
       "status": "active"
+    },
+    {
+      "id": "efa7b652-1168-4a4e-a5a4-3109243c93b5",
+      "employee_id": "WTR001",
+      "name": "Ragul",
+      "role": "waiter",
+      "pin": "1234",
+      "phone": "9876543210",
+      "hourly_wage": 120,
+      "status": "active"
     }
   ],
   "shifts": [
@@ -195,6 +205,45 @@
       "status": "clocked_in",
       "loggedHours": 0,
       "loggedMinutes": 0
+    },
+    {
+      "id": "att_1795203799604",
+      "staffId": "WAI001",
+      "staffName": "WAI001",
+      "role": "waiter",
+      "date": "2026-11-20",
+      "clockIn": "01:24",
+      "clockOut": "01:28",
+      "breakMinutes": 0,
+      "status": "clocked_out",
+      "loggedHours": 0.07,
+      "loggedMinutes": 4
+    },
+    {
+      "id": "att_1795203801687",
+      "staffId": "CHF001",
+      "staffName": "CHF001",
+      "role": "waiter",
+      "date": "2026-11-20",
+      "clockIn": "01:25",
+      "clockOut": "01:28",
+      "breakMinutes": 0,
+      "status": "clocked_out",
+      "loggedHours": 0.05,
+      "loggedMinutes": 3
+    },
+    {
+      "id": "att_1795203802140",
+      "staffId": "BIL001",
+      "staffName": "Priya Sharma",
+      "role": "billing",
+      "date": "2026-11-20",
+      "clockIn": "01:25",
+      "clockOut": "01:28",
+      "breakMinutes": 0,
+      "status": "clocked_out",
+      "loggedHours": 0.05,
+      "loggedMinutes": 3
     }
   ],
   "swaps": [

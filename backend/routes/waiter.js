@@ -153,6 +153,7 @@ router.get("/floor-plan", async (req, res) => {
           session_id,
           status,
           tab_name,
+          created_at,
           needs_waiter,
           assigned_waiter_id,
           staff:assigned_waiter_id ( id, name, employee_id ),
@@ -177,6 +178,7 @@ router.get("/floor-plan", async (req, res) => {
             session_id,
             status,
             tab_name,
+            created_at,
             needs_waiter,
             orders (
               order_serves (
@@ -230,14 +232,21 @@ router.get("/floor-plan", async (req, res) => {
         employeeId: activeSession.staff.employee_id
       } : null;
 
+      const sessionCreatedAt = activeSession?.created_at ||
+        (activeSession?.session_id?.startsWith("sess_")
+          ? new Date(parseInt(activeSession.session_id.split("_")[1], 10)).toISOString()
+          : null);
+
       return {
         number: t.table_number,
         isOccupied: activeSessions.length > 0,
         sharedPartiesCount: activeSessions.length,
+        sessionCreatedAt: sessionCreatedAt,
         activeTabs: activeSessions.map(s => ({
           sessionId: s.session_id,
           tabName: s.tab_name || "Main",
           status: s.status,
+          createdAt: s.created_at || (s.session_id?.startsWith("sess_") ? new Date(parseInt(s.session_id.split("_")[1], 10)).toISOString() : null)
         })),
         needsHelp: needsHelp,
         hasUnconfirmed: hasUnconfirmed,
@@ -266,7 +275,7 @@ router.get("/table-details/:tableNumber", async (req, res) => {
     // Try query with assigned waiter and tab_name
     const { data: enrichedSessions, error: enrichedErr } = await supabase
       .from("table_sessions")
-      .select("session_id, status, tab_name, assigned_waiter_id, staff:assigned_waiter_id ( id, name, employee_id )")
+      .select("session_id, status, tab_name, created_at, assigned_waiter_id, staff:assigned_waiter_id ( id, name, employee_id )")
       .eq("table_number", tableNumber)
       .neq("status", "completed") 
       .neq("status", "cancelled")
@@ -275,7 +284,7 @@ router.get("/table-details/:tableNumber", async (req, res) => {
     if (enrichedErr || !enrichedSessions || enrichedSessions.length === 0) {
       const { data: fallbackSessions, error: sessionError } = await supabase
         .from("table_sessions")
-        .select("session_id, status, tab_name")
+        .select("session_id, status, tab_name, created_at")
         .eq("table_number", tableNumber)
         .neq("status", "completed") 
         .neq("status", "cancelled")
@@ -322,14 +331,21 @@ router.get("/table-details/:tableNumber", async (req, res) => {
       notes: item.notes
     }));
 
+    const targetSessionCreatedAt = targetSession.created_at ||
+      (targetSession.session_id?.startsWith("sess_")
+        ? new Date(parseInt(targetSession.session_id.split("_")[1], 10)).toISOString()
+        : null);
+
     res.json({ 
       sessionId: targetSession.session_id,
       sessionStatus: targetSession.status,
+      sessionCreatedAt: targetSessionCreatedAt,
       tabName: targetSession.tab_name || "Main",
       availableTabs: activeSessions.map(s => ({
         sessionId: s.session_id,
         tabName: s.tab_name || "Main",
         status: s.status,
+        createdAt: s.created_at || (s.session_id?.startsWith("sess_") ? new Date(parseInt(s.session_id.split("_")[1], 10)).toISOString() : null),
         assignedWaiter: s.staff ? {
           id: s.staff.id,
           name: s.staff.name,

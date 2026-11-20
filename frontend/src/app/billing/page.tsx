@@ -41,6 +41,7 @@ interface TableData {
   status: "Available" | "Occupied" | "Billed";
   paymentMethod?: "cash" | "card" | "upi" | null;
   sessionId: string | null;
+  sessionCreatedAt?: string | null;
   orderId: string | null;
   itemTotal: number;
   waiterName?: string | null;
@@ -56,12 +57,47 @@ interface CheckoutItem {
   chefs?: string[];
 }
 
+function getSessionStartTime(createdAt?: string | null, sessionId?: string | null): number | null {
+  if (createdAt) {
+    const t = new Date(createdAt).getTime();
+    if (!isNaN(t) && t > 0) return t;
+  }
+  if (sessionId && sessionId.startsWith("sess_")) {
+    const parts = sessionId.split("_");
+    const ts = parseInt(parts[1], 10);
+    if (!isNaN(ts) && ts > 1000000000000) return ts;
+  }
+  return null;
+}
+
+function formatSessionDuration(createdAt?: string | null, sessionId?: string | null): string {
+  const startTime = getSessionStartTime(createdAt, sessionId);
+  if (!startTime) return "—";
+  const diffMs = Math.max(0, Date.now() - startTime);
+  const totalMinutes = Math.floor(diffMs / 60000);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+
+  if (hours === 0) {
+    return totalMinutes === 0 ? "< 1m" : `${totalMinutes}m`;
+  }
+  return `${hours}h ${minutes}m`;
+}
+
+function formatSessionStartTime(createdAt?: string | null, sessionId?: string | null): string {
+  const startTime = getSessionStartTime(createdAt, sessionId);
+  if (!startTime) return "";
+  const d = new Date(startTime);
+  return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+
 export default function BillingDashboard() {
   const [tables, setTables] = useState<TableData[]>([]);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [filterType, setFilterType] = useState<"all" | "billed" | "occupied" | "parcels">("all");
   const [searchTable, setSearchTable] = useState("");
+  const [, setTick] = useState(0);
 
   // Modal & Checkout State
   const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
@@ -106,7 +142,11 @@ export default function BillingDashboard() {
   useEffect(() => {
     fetchTables();
     const interval = setInterval(fetchTables, 3000);
-    return () => clearInterval(interval);
+    const tickInterval = setInterval(() => setTick((t) => t + 1), 10000);
+    return () => {
+      clearInterval(interval);
+      clearInterval(tickInterval);
+    };
   }, []);
 
   const openModal = (table: TableData) => {
@@ -425,6 +465,12 @@ export default function BillingDashboard() {
                       🤵 {table.waiterName}
                     </span>
                   )}
+                  {!isAvailable && (
+                    <div className="mt-1.5 inline-flex items-center gap-1 text-[10px] font-black text-amber-900 bg-amber-50/90 border border-amber-200/80 px-2 py-0.5 rounded-lg shadow-2xs">
+                      <Clock size={10} className="text-amber-600 shrink-0" />
+                      <span>{formatSessionDuration(table.sessionCreatedAt, table.sessionId)} open</span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="w-full pt-2 border-t border-stone-200/50 flex justify-between items-center text-xs">
@@ -459,11 +505,22 @@ export default function BillingDashboard() {
             {/* Modal Header */}
             <div className="p-5 border-b border-stone-200 flex justify-between items-center bg-[#faf9f6] rounded-t-3xl">
               <div>
-                <h3 className="text-xl font-black text-stone-900 leading-tight">
-                  {selectedTable.tableNumber > 100
-                    ? `Parcel Token #${selectedTable.tableNumber - 100}`
-                    : `Table #${selectedTable.tableNumber}${selectedTable.tabName && selectedTable.tabName !== "Main" ? ` (${selectedTable.tabName})` : ''} Settlement`}
-                </h3>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="text-xl font-black text-stone-900 leading-tight">
+                    {selectedTable.tableNumber > 100
+                      ? `Parcel Token #${selectedTable.tableNumber - 100}`
+                      : `Table #${selectedTable.tableNumber}${selectedTable.tabName && selectedTable.tabName !== "Main" ? ` (${selectedTable.tabName})` : ''} Settlement`}
+                  </h3>
+                  <span className="text-[10px] font-black text-amber-900 bg-amber-50 border border-amber-200/90 px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
+                    <Clock size={11} className="text-amber-600 shrink-0" />
+                    <span>
+                      Open for {formatSessionDuration(selectedTable.sessionCreatedAt, selectedTable.sessionId)}
+                      {formatSessionStartTime(selectedTable.sessionCreatedAt, selectedTable.sessionId)
+                        ? ` (since ${formatSessionStartTime(selectedTable.sessionCreatedAt, selectedTable.sessionId)})`
+                        : ""}
+                    </span>
+                  </span>
+                </div>
                 <div className="flex flex-wrap items-center gap-2 mt-1">
                   <p className="text-[10px] font-black uppercase tracking-widest text-stone-400">
                     POS Payment Terminal
