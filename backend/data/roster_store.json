@@ -19,6 +19,16 @@
       "phone": "9876543210",
       "hourly_wage": 120,
       "status": "active"
+    },
+    {
+      "id": "8fe45b9f-2c9f-45c6-8a1e-3d7501fd01f0",
+      "employee_id": "CK001",
+      "name": "karan",
+      "role": "kitchen",
+      "pin": "6597",
+      "phone": "98765-43210",
+      "hourly_wage": 120,
+      "status": "active"
     }
   ],
   "shifts": [

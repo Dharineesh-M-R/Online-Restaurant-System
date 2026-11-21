@@ -33,6 +33,9 @@ import {
   Coffee,
   Play,
   Pause,
+  Eye,
+  EyeOff,
+  Key,
 } from "lucide-react";
 
 // ==========================================
@@ -152,36 +155,47 @@ export interface PayrollRow {
   unsettledAdvancesList: AdvanceRecord[];
 }
 
-// Helpers
+// Helpers with explicit Asia/Kolkata (IST) conversion
 function formatTime12h(isoStr: string | null | undefined): string {
   if (!isoStr) return "—";
   try {
     const d = new Date(isoStr);
     if (isNaN(d.getTime())) return isoStr;
-    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true });
+    return d.toLocaleTimeString("en-US", {
+      timeZone: "Asia/Kolkata",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    });
   } catch {
     return isoStr;
   }
 }
 
-function toLocalTimeInputValue(isoStr: string | null | undefined): string {
+function toISTTimeInput(isoStr: string | null | undefined): string {
   if (!isoStr) return "";
   try {
     const d = new Date(isoStr);
     if (isNaN(d.getTime())) return "";
-    const h = String(d.getHours()).padStart(2, "0");
-    const m = String(d.getMinutes()).padStart(2, "0");
-    return `${h}:${m}`;
+    return d.toLocaleTimeString("en-GB", {
+      timeZone: "Asia/Kolkata",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }); // Returns "HH:MM" in IST
   } catch {
     return "";
   }
 }
 
+// Alias for backwards compatibility
+const toLocalTimeInputValue = toISTTimeInput;
+
 export default function StaffRoster() {
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
-  // Active Top Tab
-  const [activeTab, setActiveTab] = useState<"today" | "register" | "khata" | "payroll">("today");
+  // Active Top Tab (5 Tabs)
+  const [activeTab, setActiveTab] = useState<"today" | "register" | "khata" | "payroll" | "team">("today");
 
   // Notifications
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
@@ -314,6 +328,37 @@ export default function StaffRoster() {
     pin: "",
   });
 
+  // -------------------------------------------------------------
+  // TAB 5: TEAM & CREDENTIALS STATE
+  // -------------------------------------------------------------
+  const [teamSearch, setTeamSearch] = useState("");
+  const [teamRoleFilter, setTeamRoleFilter] = useState("all");
+  const [teamStatusFilter, setTeamStatusFilter] = useState<"all" | "active" | "inactive">("all");
+  const [revealedPins, setRevealedPins] = useState<Record<string, boolean>>({});
+
+  // Edit Staff Profile & Credentials Modal State
+  const [editStaffModal, setEditStaffModal] = useState<{
+    isOpen: boolean;
+    staffId: string;
+    name: string;
+    employee_id: string;
+    role: "waiter" | "kitchen" | "billing" | "manager";
+    pin: string;
+    phone: string;
+    is_active: boolean;
+    isSubmitting: boolean;
+  }>({
+    isOpen: false,
+    staffId: "",
+    name: "",
+    employee_id: "",
+    role: "waiter",
+    pin: "",
+    phone: "",
+    is_active: true,
+    isSubmitting: false,
+  });
+
   // ==========================================
   // DATA FETCHING FUNCTIONS
   // ==========================================
@@ -422,9 +467,13 @@ export default function StaffRoster() {
   useEffect(() => {
     if (activeTab === "today") fetchTodayDesk();
     if (activeTab === "register") fetchRegister();
-    if (activeTab === "khata") fetchKhata();
+    if (activeTab === "khata") {
+      fetchKhata();
+      fetchStaffConfigs();
+    }
     if (activeTab === "payroll") fetchPayroll();
-  }, [activeTab, fetchTodayDesk, fetchRegister, fetchKhata, fetchPayroll]);
+    if (activeTab === "team") fetchStaffConfigs();
+  }, [activeTab, fetchTodayDesk, fetchRegister, fetchKhata, fetchPayroll, fetchStaffConfigs]);
 
   // -------------------------------------------------------------
   // TAB 1 ACTIONS (Today's Desk: Live Punches & Mid-Day Breaks)
@@ -953,6 +1002,115 @@ export default function StaffRoster() {
     );
   }, [payrollData]);
 
+  // -------------------------------------------------------------
+  // TAB 5 ACTIONS & FILTERING (Team & Credentials)
+  // -------------------------------------------------------------
+
+  const filteredTeamMembers = useMemo(() => {
+    return staffConfigs.filter((s) => {
+      const search = teamSearch.toLowerCase().trim();
+      const matchesSearch =
+        !search ||
+        s.name.toLowerCase().includes(search) ||
+        s.employee_id.toLowerCase().includes(search) ||
+        s.role.toLowerCase().includes(search) ||
+        (s.phone && s.phone.includes(search));
+
+      const matchesRole = teamRoleFilter === "all" || s.role === teamRoleFilter;
+      const matchesStatus =
+        teamStatusFilter === "all" ||
+        (teamStatusFilter === "active" && s.is_active !== false) ||
+        (teamStatusFilter === "inactive" && s.is_active === false);
+
+      return matchesSearch && matchesRole && matchesStatus;
+    });
+  }, [staffConfigs, teamSearch, teamRoleFilter, teamStatusFilter]);
+
+  const togglePinVisibility = (staffId: string) => {
+    setRevealedPins((prev) => ({ ...prev, [staffId]: !prev[staffId] }));
+  };
+
+  const handleToggleStaffActive = async (staff: StaffConfig) => {
+    const newActive = !staff.is_active;
+    try {
+      const res = await fetch(`${apiUrl}/management/hr/staff/${staff.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_active: newActive }),
+      });
+      if (res.ok) {
+        showToast(`Staff member marked as ${newActive ? "Active" : "Inactive"}`);
+        fetchStaffConfigs();
+        if (activeTab === "today") fetchTodayDesk();
+      } else {
+        const d = await res.json();
+        showToast(d.error || "Failed to update staff status", "error");
+      }
+    } catch {
+      showToast("Error updating staff status", "error");
+    }
+  };
+
+  const handleOpenEditStaff = (staff: StaffConfig) => {
+    setEditStaffModal({
+      isOpen: true,
+      staffId: staff.id,
+      name: staff.name,
+      employee_id: staff.employee_id,
+      role: staff.role,
+      pin: staff.pin || "0000",
+      phone: staff.phone || "",
+      is_active: staff.is_active !== false,
+      isSubmitting: false,
+    });
+  };
+
+  const handleSaveEditStaff = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editStaffModal.name.trim()) {
+      showToast("Name is required", "error");
+      return;
+    }
+    if (!editStaffModal.employee_id.trim()) {
+      showToast("Employee ID is required", "error");
+      return;
+    }
+    if (editStaffModal.pin && !/^\d{4}$/.test(editStaffModal.pin.trim())) {
+      showToast("PIN must be exactly 4 digits", "error");
+      return;
+    }
+
+    try {
+      setEditStaffModal((prev) => ({ ...prev, isSubmitting: true }));
+      const res = await fetch(`${apiUrl}/management/hr/staff/${editStaffModal.staffId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: editStaffModal.name.trim(),
+          employee_id: editStaffModal.employee_id.trim().toUpperCase(),
+          role: editStaffModal.role,
+          pin: editStaffModal.pin.trim(),
+          phone: editStaffModal.phone.trim(),
+          is_active: editStaffModal.is_active,
+        }),
+      });
+
+      if (res.ok) {
+        showToast("Employee profile and credentials updated!");
+        setEditStaffModal((prev) => ({ ...prev, isOpen: false }));
+        fetchStaffConfigs();
+        if (activeTab === "today") fetchTodayDesk();
+      } else {
+        const d = await res.json();
+        showToast(d.error || "Failed to update employee", "error");
+      }
+    } catch {
+      showToast("Error saving employee details", "error");
+    } finally {
+      setEditStaffModal((prev) => ({ ...prev, isSubmitting: false }));
+    }
+  };
+
   // ==========================================
   // RENDER UI
   // ==========================================
@@ -1013,6 +1171,7 @@ export default function StaffRoster() {
           { id: "register", label: "Monthly Register", icon: Calendar },
           { id: "khata", label: `Khata Advances (₹${unsettledTotal.toLocaleString()})`, icon: CreditCard },
           { id: "payroll", label: "Monthly Settlement & Wage Config", icon: FileSpreadsheet },
+          { id: "team", label: "Team & Credentials", icon: Users },
         ].map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -1732,11 +1891,13 @@ export default function StaffRoster() {
                     required
                   >
                     <option value="">-- Choose Employee --</option>
-                    {staffConfigs.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name} ({s.employee_id} • {s.role})
-                      </option>
-                    ))}
+                    {staffConfigs
+                      .filter((s) => s.is_active !== false)
+                      .map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name} ({s.employee_id} • {s.role})
+                        </option>
+                      ))}
                   </select>
                 </div>
 
@@ -1819,11 +1980,13 @@ export default function StaffRoster() {
                   className="px-3 py-1 bg-stone-50 border border-stone-200 rounded-xl text-xs font-bold"
                 >
                   <option value="all">All Employees</option>
-                  {staffConfigs.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
+                  {staffConfigs
+                    .filter((s) => s.is_active !== false)
+                    .map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name} ({s.employee_id})
+                      </option>
+                    ))}
                 </select>
               </div>
 
@@ -2300,6 +2463,272 @@ export default function StaffRoster() {
       )}
 
       {/* ========================================================================= */}
+      {/* 5. TEAM & CREDENTIALS TAB (PERSONNEL DIRECTORY & SYSTEM ACCESS) */}
+      {/* ========================================================================= */}
+      {activeTab === "team" && (
+        <div className="space-y-4">
+          
+          {/* Top Controls: Search, Filters, Stats & Add */}
+          <div className="bg-white p-4 rounded-2xl border border-stone-200/80 shadow-xs flex flex-wrap items-center justify-between gap-4">
+            <div className="flex flex-wrap items-center gap-3">
+              {/* Search Input */}
+              <div className="relative w-72">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+                <input
+                  type="text"
+                  placeholder="Search name, ID (e.g. WTR001)..."
+                  value={teamSearch}
+                  onChange={(e) => setTeamSearch(e.target.value)}
+                  className="w-full pl-8 pr-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-bold outline-none focus:bg-white"
+                />
+              </div>
+
+              {/* Role Filter */}
+              <select
+                value={teamRoleFilter}
+                onChange={(e) => setTeamRoleFilter(e.target.value)}
+                className="px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-bold text-stone-800"
+              >
+                <option value="all">All Roles</option>
+                <option value="waiter">Waiters</option>
+                <option value="kitchen">Kitchen Chefs</option>
+                <option value="billing">Billing Cashiers</option>
+                <option value="manager">Floor Managers</option>
+              </select>
+
+              {/* Status Filter */}
+              <select
+                value={teamStatusFilter}
+                onChange={(e) => setTeamStatusFilter(e.target.value as any)}
+                className="px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-bold text-stone-800"
+              >
+                <option value="all">All Status</option>
+                <option value="active">Active Only</option>
+                <option value="inactive">Inactive Only</option>
+              </select>
+            </div>
+
+            {/* Quick Stats Badges & Add Button */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="px-3 py-1.5 rounded-xl bg-stone-100 text-stone-700 text-xs font-black">
+                Total: {staffConfigs.length}
+              </span>
+              <span className="px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-black">
+                Active: {staffConfigs.filter((s) => s.is_active !== false).length}
+              </span>
+              {staffConfigs.filter((s) => s.is_active === false).length > 0 && (
+                <span className="px-3 py-1.5 rounded-xl bg-rose-50 text-rose-700 border border-rose-200 text-xs font-black">
+                  Inactive: {staffConfigs.filter((s) => s.is_active === false).length}
+                </span>
+              )}
+              <button
+                onClick={() => setShowAddStaffModal(true)}
+                className="flex items-center gap-1.5 px-3.5 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-xl text-xs font-black shadow-xs shadow-orange-600/20 transition cursor-pointer"
+              >
+                <Plus size={14} />
+                <span>Add Team Member</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Directory Table */}
+          <div className="bg-white rounded-2xl border border-stone-200/80 shadow-xs overflow-hidden">
+            <div className="p-4 border-b border-stone-100 flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-black text-stone-900 flex items-center gap-2">
+                  <Users size={16} className="text-orange-600" />
+                  <span>Team Directory & Portal Access Credentials</span>
+                </h3>
+                <p className="text-xs text-stone-500 font-medium mt-0.5">
+                  Manage login PINs, staff roles, and activate/deactivate personnel across Antigravity terminals.
+                </p>
+              </div>
+              <button
+                onClick={fetchStaffConfigs}
+                className="p-2 rounded-xl border border-stone-200 text-stone-600 hover:bg-stone-50 transition cursor-pointer"
+                title="Refresh staff list"
+              >
+                <RefreshCw size={14} className={loadingStaff ? "animate-spin" : ""} />
+              </button>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-stone-50/80 border-b border-stone-100 text-[10px] font-black text-stone-400 uppercase tracking-wider">
+                    <th className="py-3.5 px-5">Staff Member</th>
+                    <th className="py-3.5 px-4">Employee ID</th>
+                    <th className="py-3.5 px-4">Assigned Role</th>
+                    <th className="py-3.5 px-4">Wage Model</th>
+                    <th className="py-3.5 px-4">Login PIN</th>
+                    <th className="py-3.5 px-4">Account Status</th>
+                    <th className="py-3.5 px-5 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-stone-100">
+                  {filteredTeamMembers.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="py-8 text-center text-stone-400 font-medium">
+                        No team members matching your search or filter criteria.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredTeamMembers.map((staff) => {
+                      const isPinVisible = Boolean(revealedPins[staff.id]);
+                      const isActive = staff.is_active !== false;
+
+                      return (
+                        <tr
+                          key={staff.id}
+                          className={`hover:bg-stone-50/60 transition ${
+                            !isActive ? "opacity-60 bg-stone-50/30" : ""
+                          }`}
+                        >
+                          {/* Name & Phone */}
+                          <td className="py-3.5 px-5">
+                            <div className="flex items-center gap-3">
+                              <div
+                                className={`w-9 h-9 rounded-xl text-white font-black text-xs flex items-center justify-center shrink-0 ${
+                                  !isActive
+                                    ? "bg-stone-400"
+                                    : staff.role === "manager"
+                                    ? "bg-blue-600"
+                                    : staff.role === "kitchen"
+                                    ? "bg-amber-600"
+                                    : staff.role === "billing"
+                                    ? "bg-purple-600"
+                                    : "bg-stone-900"
+                                }`}
+                              >
+                                {staff.name.slice(0, 2).toUpperCase()}
+                              </div>
+                              <div>
+                                <p className="font-black text-stone-900 text-xs flex items-center gap-1.5">
+                                  <span>{staff.name}</span>
+                                  {!isActive && (
+                                    <span className="text-[9px] font-bold uppercase px-1.5 py-0.2 rounded bg-stone-200 text-stone-600">
+                                      Former
+                                    </span>
+                                  )}
+                                </p>
+                                <p className="text-[10px] text-stone-400 font-medium">
+                                  {staff.phone || "No phone linked"}
+                                </p>
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* Employee ID */}
+                          <td className="py-3.5 px-4">
+                            <span className="px-2.5 py-1 bg-stone-100 border border-stone-200 rounded-lg text-xs font-mono font-black text-stone-800">
+                              {staff.employee_id}
+                            </span>
+                          </td>
+
+                          {/* Role Badge */}
+                          <td className="py-3.5 px-4">
+                            <span
+                              className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border inline-flex items-center gap-1 ${
+                                staff.role === "manager"
+                                  ? "bg-blue-50 text-blue-700 border-blue-200"
+                                  : staff.role === "kitchen"
+                                  ? "bg-amber-50 text-amber-700 border-amber-200"
+                                  : staff.role === "billing"
+                                  ? "bg-purple-50 text-purple-700 border-purple-200"
+                                  : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                              }`}
+                            >
+                              {staff.role}
+                            </span>
+                          </td>
+
+                          {/* Wage Model */}
+                          <td className="py-3.5 px-4">
+                            <div className="space-y-0.5">
+                              <span className="text-xs font-bold text-stone-700 capitalize">
+                                {staff.wage_type}
+                              </span>
+                              <p className="text-[10px] text-stone-400 font-bold">
+                                ₹{staff.base_rate?.toLocaleString()} ({staff.standard_shift_hours || 9}h shift)
+                              </p>
+                            </div>
+                          </td>
+
+                          {/* Login PIN with Eye toggle */}
+                          <td className="py-3.5 px-4">
+                            <div className="flex items-center gap-2">
+                              <span
+                                className={`font-mono text-xs font-black px-2.5 py-1 rounded-lg border tracking-widest ${
+                                  isPinVisible
+                                    ? "bg-amber-50 text-amber-900 border-amber-200"
+                                    : "bg-stone-50 text-stone-500 border-stone-200"
+                                }`}
+                              >
+                                {isPinVisible ? (staff.pin || "0000") : "••••"}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => togglePinVisibility(staff.id)}
+                                className="p-1 rounded-lg hover:bg-stone-100 text-stone-400 hover:text-stone-700 transition cursor-pointer"
+                                title={isPinVisible ? "Hide PIN" : "Show PIN"}
+                              >
+                                {isPinVisible ? <EyeOff size={14} /> : <Eye size={14} />}
+                              </button>
+                            </div>
+                          </td>
+
+                          {/* Account Status */}
+                          <td className="py-3.5 px-4">
+                            {isActive ? (
+                              <span className="px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200 inline-flex items-center gap-1.5">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                <span>Active (Can Login)</span>
+                              </span>
+                            ) : (
+                              <span className="px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-stone-100 text-stone-500 border border-stone-200 inline-flex items-center gap-1.5">
+                                <span className="w-1.5 h-1.5 rounded-full bg-stone-400" />
+                                <span>Disabled</span>
+                              </span>
+                            )}
+                          </td>
+
+                          {/* Actions: Edit & Toggle Active */}
+                          <td className="py-3.5 px-5 text-right">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                onClick={() => handleOpenEditStaff(staff)}
+                                className="px-3 py-1.5 bg-stone-900 hover:bg-black text-white rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer shadow-2xs"
+                                title="Edit Profile & Reset PIN"
+                              >
+                                <Edit3 size={12} />
+                                <span>Edit</span>
+                              </button>
+
+                              <button
+                                onClick={() => handleToggleStaffActive(staff)}
+                                className={`px-2.5 py-1.5 rounded-xl text-[10px] font-black transition cursor-pointer border ${
+                                  isActive
+                                    ? "border-rose-200 text-rose-700 hover:bg-rose-50"
+                                    : "border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                                }`}
+                                title={isActive ? "Disable employee login" : "Re-activate employee"}
+                              >
+                                {isActive ? "Deactivate" : "Activate"}
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
       {/* MODAL: MANUAL PUNCH (Today's Desk: In, Out, Break Start, Break End) */}
       {/* ========================================================================= */}
       {punchModal.isOpen && (
@@ -2743,6 +3172,150 @@ export default function StaffRoster() {
                   className="px-5 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-xl text-xs font-black shadow-xs shadow-orange-600/20"
                 >
                   Save Profile
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: EDIT STAFF PROFILE & CREDENTIALS */}
+      {/* ========================================================================= */}
+      {editStaffModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-950/60 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white w-full max-w-lg rounded-3xl p-6 shadow-2xl border border-stone-200 animate-in zoom-in-95">
+            <div className="flex justify-between items-center mb-4 pb-2 border-b border-stone-100">
+              <h3 className="text-base font-black text-stone-900 flex items-center gap-2">
+                <Key size={18} className="text-orange-600" />
+                <span>Edit Profile & Credentials</span>
+              </h3>
+              <button
+                onClick={() => setEditStaffModal((prev) => ({ ...prev, isOpen: false }))}
+                className="p-1 rounded-full hover:bg-stone-100 text-stone-400"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditStaff} className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] font-black uppercase text-stone-400 block mb-1">
+                    Full Name *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editStaffModal.name}
+                    onChange={(e) => setEditStaffModal((prev) => ({ ...prev, name: e.target.value }))}
+                    className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-bold text-stone-900"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-black uppercase text-stone-400 block mb-1">
+                    Employee ID *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editStaffModal.employee_id}
+                    onChange={(e) => setEditStaffModal((prev) => ({ ...prev, employee_id: e.target.value.toUpperCase() }))}
+                    className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-mono font-bold text-stone-900 uppercase"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] font-black uppercase text-stone-400 block mb-1">
+                    System Role *
+                  </label>
+                  <select
+                    value={editStaffModal.role}
+                    onChange={(e) => setEditStaffModal((prev) => ({ ...prev, role: e.target.value as any }))}
+                    className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-bold capitalize"
+                  >
+                    <option value="waiter">Waiter</option>
+                    <option value="kitchen">Kitchen Chef</option>
+                    <option value="billing">Billing Cashier</option>
+                    <option value="manager">Floor Manager</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-black uppercase text-stone-400 block mb-1">
+                    Contact Phone
+                  </label>
+                  <input
+                    type="tel"
+                    placeholder="e.g. 98765-43210"
+                    value={editStaffModal.phone}
+                    onChange={(e) => setEditStaffModal((prev) => ({ ...prev, phone: e.target.value }))}
+                    className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-medium"
+                  />
+                </div>
+              </div>
+
+              {/* Login PIN with Quick Random Generator */}
+              <div className="bg-stone-50 p-3.5 rounded-2xl border border-stone-200 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-black text-stone-900 flex items-center gap-1.5">
+                    <Key size={14} className="text-amber-600" />
+                    <span>Terminal Login PIN (4 Digits)</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const randomPin = Math.floor(1000 + Math.random() * 9000).toString();
+                      setEditStaffModal((prev) => ({ ...prev, pin: randomPin }));
+                    }}
+                    className="text-[11px] font-black text-orange-600 hover:text-orange-700 bg-orange-50 hover:bg-orange-100 px-2 py-0.5 rounded-lg transition cursor-pointer"
+                  >
+                    🎲 Generate Random PIN
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  maxLength={4}
+                  required
+                  value={editStaffModal.pin}
+                  onChange={(e) => setEditStaffModal((prev) => ({ ...prev, pin: e.target.value }))}
+                  className="w-full px-3 py-2 bg-white border border-stone-200 rounded-xl text-sm font-mono font-black text-stone-900 tracking-widest text-center"
+                />
+                <p className="text-[10px] text-stone-500 font-medium">
+                  Staff members use this 4-digit PIN to authenticate on the POS, KDS, or Waiter portal.
+                </p>
+              </div>
+
+              {/* Active Toggle Checkbox */}
+              <div className="flex items-center gap-2 p-2 bg-stone-50 rounded-xl border border-stone-200">
+                <input
+                  type="checkbox"
+                  id="staffActiveToggle"
+                  checked={editStaffModal.is_active}
+                  onChange={(e) => setEditStaffModal((prev) => ({ ...prev, is_active: e.target.checked }))}
+                  className="rounded border-stone-300 text-orange-600 focus:ring-orange-500 cursor-pointer"
+                />
+                <label htmlFor="staffActiveToggle" className="text-xs font-bold text-stone-800 cursor-pointer">
+                  Account Active (Uncheck to soft-deactivate former employee)
+                </label>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEditStaffModal((prev) => ({ ...prev, isOpen: false }))}
+                  className="px-4 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-xl text-xs font-bold cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={editStaffModal.isSubmitting}
+                  className="px-5 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-xl text-xs font-black shadow-xs shadow-orange-600/20 transition cursor-pointer"
+                >
+                  {editStaffModal.isSubmitting ? "Saving..." : "Save Credentials"}
                 </button>
               </div>
             </form>

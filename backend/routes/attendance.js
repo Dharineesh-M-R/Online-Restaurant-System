@@ -1,7 +1,22 @@
 import express from "express";
 import supabase from "../supabase.js";
+import { loadRosterStore, saveRosterStore, DEFAULT_STAFF } from "../rosterStore.js";
 
 const router = express.Router();
+
+// Helper to safely convert "2026-11-21" + "18:00" into an IST timestamptz (UTC ISO string)
+export function buildISTTimestamp(workDate, timeStr) {
+  if (!timeStr) return null;
+  // If already a string with 'T'
+  if (timeStr.includes("T")) {
+    if (timeStr.includes("Z") || timeStr.includes("+") || (timeStr.split("T")[1] && timeStr.split("T")[1].includes("-"))) {
+      return new Date(timeStr).toISOString();
+    }
+    return new Date(`${timeStr}+05:30`).toISOString();
+  }
+  const cleanTime = timeStr.length === 5 ? `${timeStr}:00` : timeStr;
+  return new Date(`${workDate}T${cleanTime}+05:30`).toISOString();
+}
 
 // ==========================================
 // 1. STAFF CONFIGURATION ROUTES
@@ -10,21 +25,165 @@ const router = express.Router();
 // GET /management/hr/staff-config: Lists all staff with wage type, rates, and cutoffs
 router.get("/staff-config", async (req, res) => {
   try {
-    const { data: staffList, error } = await supabase
-      .from("staff")
-      .select(`
-        id, employee_id, name, role,
-        wage_type, base_rate, standard_shift_hours,
-        half_day_cutoff_hours, overtime_hourly_rate,
-        paid_weekly_offs_per_month, default_break_hours, is_active, created_at
-      `)
-      .order("name", { ascending: true });
+    const store = loadRosterStore();
+    const localStaff = Array.isArray(store.staff) && store.staff.length > 0 ? store.staff : DEFAULT_STAFF;
 
-    if (error) throw error;
-    res.json({ staff: staffList || [] });
+    let dbStaff = null;
+    let dbError = null;
+
+    try {
+      const { data, error } = await supabase
+        .from("staff")
+        .select(`
+          id, employee_id, name, role, pin, phone,
+          wage_type, base_rate, standard_shift_hours,
+          half_day_cutoff_hours, overtime_hourly_rate,
+          paid_weekly_offs_per_month, default_break_hours, is_active
+        `)
+        .order("name", { ascending: true });
+
+      if (error) {
+        dbError = error;
+        console.warn("Supabase staff-config select warning:", error.message || error);
+      } else {
+        dbStaff = data;
+      }
+    } catch (err) {
+      dbError = err;
+      console.warn("Supabase staff-config query exception:", err.message || err);
+    }
+
+    if (Array.isArray(dbStaff) && dbStaff.length > 0) {
+      // Build quick lookup for phone or overrides from local store if needed
+      const localPhoneMap = new Map();
+      localStaff.forEach((s) => {
+        if (s.id && s.phone) localPhoneMap.set(String(s.id), s.phone);
+        if (s.employee_id && s.phone) localPhoneMap.set(s.employee_id.toUpperCase(), s.phone);
+      });
+
+      const formattedStaff = dbStaff.map((s) => {
+        const empIdUpper = s.employee_id ? s.employee_id.toUpperCase() : "";
+        const fallbackPhone = localPhoneMap.get(String(s.id)) || (empIdUpper ? localPhoneMap.get(empIdUpper) : null) || null;
+
+        return {
+          ...s,
+          phone: s.phone || fallbackPhone || null,
+          role: s.role || "waiter",
+          wage_type: s.wage_type || "monthly",
+          base_rate: Number(s.base_rate || 0),
+          standard_shift_hours: Number(s.standard_shift_hours || 9),
+          half_day_cutoff_hours: Number(s.half_day_cutoff_hours || 5),
+          overtime_hourly_rate: Number(s.overtime_hourly_rate || 0),
+          paid_weekly_offs_per_month: Number(s.paid_weekly_offs_per_month ?? 4),
+          default_break_hours: Number(s.default_break_hours ?? 2),
+          is_active: s.is_active !== false,
+        };
+      });
+
+      return res.json({ staff: formattedStaff });
+    }
+
+    // Fallback: If Supabase returned empty or threw an error, return local staff mapped with wage defaults
+    const fallbackList = localStaff.map((s) => ({
+      id: s.id,
+      employee_id: s.employee_id || `STF${String(s.id).slice(-3)}`,
+      name: s.name,
+      role: s.role || "waiter",
+      pin: s.pin || "0000",
+      phone: s.phone || "98765-43210",
+      wage_type: s.wage_type || (s.hourly_wage ? "hourly" : "monthly"),
+      base_rate: Number(s.base_rate || s.hourly_wage || 120),
+      standard_shift_hours: Number(s.standard_shift_hours || 9),
+      half_day_cutoff_hours: Number(s.half_day_cutoff_hours || 5),
+      overtime_hourly_rate: Number(s.overtime_hourly_rate || 100),
+      paid_weekly_offs_per_month: Number(s.paid_weekly_offs_per_month ?? 4),
+      default_break_hours: Number(s.default_break_hours ?? 2),
+      is_active: s.status !== "inactive" && s.is_active !== false,
+    }));
+
+    res.json({ staff: fallbackList });
   } catch (err) {
     console.error("GET /staff-config Error:", err);
     res.status(500).json({ error: "Failed to fetch staff configurations" });
+  }
+});
+
+// PATCH /management/hr/staff/:staffId: Updates employee directory & credentials (name, employee_id, role, pin, is_active, phone)
+router.patch("/staff/:staffId", async (req, res) => {
+  const { staffId } = req.params;
+  const { name, employee_id, role, pin, is_active, phone } = req.body;
+
+  if (!staffId) return res.status(400).json({ error: "Staff ID is required" });
+
+  try {
+    // 1. If employee_id is being updated, check for duplicates
+    if (employee_id) {
+      const cleanEmpId = employee_id.trim().toUpperCase();
+      const { data: existingEmp, error: checkErr } = await supabase
+        .from("staff")
+        .select("id")
+        .ilike("employee_id", cleanEmpId)
+        .neq("id", staffId)
+        .maybeSingle();
+
+      if (checkErr) console.warn("Check duplicate employee_id warning:", checkErr);
+      if (existingEmp) {
+        return res.status(400).json({ error: `Employee ID "${cleanEmpId}" is already assigned to another team member` });
+      }
+    }
+
+    // 2. Validate PIN if supplied
+    if (pin !== undefined && pin !== null) {
+      const pinStr = String(pin).trim();
+      if (!/^\d{4}$/.test(pinStr)) {
+        return res.status(400).json({ error: "PIN must be exactly 4 numeric digits" });
+      }
+    }
+
+    // 3. Build updates
+    const updates = {};
+    if (name !== undefined) updates.name = name.trim();
+    if (employee_id !== undefined) updates.employee_id = employee_id.trim().toUpperCase();
+    if (role !== undefined) updates.role = role;
+    if (pin !== undefined) updates.pin = String(pin).trim();
+    if (is_active !== undefined) updates.is_active = Boolean(is_active);
+    if (phone !== undefined) updates.phone = phone ? phone.trim() : null;
+
+    const { data: updatedStaff, error: updateErr } = await supabase
+      .from("staff")
+      .update(updates)
+      .eq("id", staffId)
+      .select()
+      .single();
+
+    if (updateErr) throw updateErr;
+
+    // Keep local store in sync if staff exists there
+    try {
+      const store = loadRosterStore();
+      if (Array.isArray(store.staff)) {
+        const idx = store.staff.findIndex((s) => s.id === staffId || s.employee_id === updatedStaff.employee_id);
+        if (idx !== -1) {
+          store.staff[idx] = {
+            ...store.staff[idx],
+            name: updatedStaff.name,
+            employee_id: updatedStaff.employee_id,
+            role: updatedStaff.role,
+            pin: updatedStaff.pin,
+            phone: updatedStaff.phone || store.staff[idx].phone,
+            status: updatedStaff.is_active ? "active" : "inactive",
+          };
+          saveRosterStore(store);
+        }
+      }
+    } catch (syncErr) {
+      console.warn("Local store sync warning:", syncErr.message);
+    }
+
+    res.json({ success: true, staff: updatedStaff });
+  } catch (err) {
+    console.error("PATCH /staff/:staffId Error:", err);
+    res.status(500).json({ error: err.message || "Failed to update staff member" });
   }
 });
 
@@ -81,11 +240,10 @@ router.get("/attendance", async (req, res) => {
   const date = req.query.date || new Date().toISOString().split("T")[0];
 
   try {
-    // 1. Fetch active staff with default break hours
+    // 1. Fetch staff with default break hours (including active and past staff with records)
     const { data: staffMembers, error: staffErr } = await supabase
       .from("staff")
       .select("id, employee_id, name, role, wage_type, base_rate, standard_shift_hours, half_day_cutoff_hours, overtime_hourly_rate, default_break_hours, is_active")
-      .eq("is_active", true)
       .order("name", { ascending: true });
 
     if (staffErr) throw staffErr;
@@ -101,7 +259,10 @@ router.get("/attendance", async (req, res) => {
     const attendanceMap = new Map();
     (attendanceList || []).forEach((a) => attendanceMap.set(a.staff_id, a));
 
-    const combined = (staffMembers || []).map((s) => {
+    // Only show active staff, or inactive staff who have a record on this specific date
+    const combined = (staffMembers || [])
+      .filter((s) => s.is_active !== false || attendanceMap.has(s.id))
+      .map((s) => {
       const record = attendanceMap.get(s.id);
       const isOnBreak = Boolean(
         record?.break_start &&
@@ -160,7 +321,9 @@ router.post("/attendance/clock-in", async (req, res) => {
   if (!staffId) return res.status(400).json({ error: "Staff ID is required" });
 
   const targetDate = workDate || new Date().toISOString().split("T")[0];
-  const finalClockIn = clockInTime || new Date().toISOString();
+  const finalClockIn = clockInTime
+    ? buildISTTimestamp(targetDate, clockInTime)
+    : new Date().toISOString();
 
   try {
     const { data, error } = await supabase
@@ -194,7 +357,9 @@ router.patch("/attendance/break-start", async (req, res) => {
   if (!staffId) return res.status(400).json({ error: "Staff ID is required" });
 
   const targetDate = workDate || new Date().toISOString().split("T")[0];
-  const finalBreakStart = customTime || new Date().toISOString();
+  const finalBreakStart = customTime
+    ? buildISTTimestamp(targetDate, customTime)
+    : new Date().toISOString();
 
   try {
     const { data: existing, error: fetchErr } = await supabase
@@ -234,7 +399,9 @@ router.patch("/attendance/break-end", async (req, res) => {
   if (!staffId) return res.status(400).json({ error: "Staff ID is required" });
 
   const targetDate = workDate || new Date().toISOString().split("T")[0];
-  const finalBreakEnd = customTime || new Date().toISOString();
+  let finalBreakEnd = customTime
+    ? buildISTTimestamp(targetDate, customTime)
+    : new Date().toISOString();
 
   try {
     const { data: existing, error: fetchErr } = await supabase
@@ -246,6 +413,11 @@ router.patch("/attendance/break-end", async (req, res) => {
 
     if (!existing || !existing.break_start) {
       return res.status(400).json({ error: "No break start timestamp found for this shift" });
+    }
+
+    // Roll break-end forward 24h if overnight break
+    if (new Date(finalBreakEnd).getTime() <= new Date(existing.break_start).getTime()) {
+      finalBreakEnd = new Date(new Date(finalBreakEnd).getTime() + 24 * 60 * 60 * 1000).toISOString();
     }
 
     const startMs = new Date(existing.break_start).getTime();
@@ -291,7 +463,9 @@ router.patch("/attendance/clock-out", async (req, res) => {
   if (!staffId) return res.status(400).json({ error: "Staff ID is required" });
 
   const targetDate = workDate || new Date().toISOString().split("T")[0];
-  const finalClockOut = clockOutTime || new Date().toISOString();
+  let finalClockOut = clockOutTime
+    ? buildISTTimestamp(targetDate, clockOutTime)
+    : new Date().toISOString();
 
   try {
     // 1. Fetch staff member settings
@@ -317,9 +491,17 @@ router.patch("/attendance/clock-out", async (req, res) => {
       return res.status(400).json({ error: "Cannot clock out: No clock-in record found for this date" });
     }
 
+    // Roll clockOut forward 24h if overnight shift (clockOut <= clockIn)
+    if (new Date(finalClockOut).getTime() <= new Date(existing.clock_in).getTime()) {
+      finalClockOut = new Date(new Date(finalClockOut).getTime() + 24 * 60 * 60 * 1000).toISOString();
+    }
+
     // 3. Compute break hours
-    let finalBreakStart = breakStart !== undefined ? breakStart : existing.break_start;
-    let finalBreakEnd = breakEnd !== undefined ? breakEnd : existing.break_end;
+    let finalBreakStart = breakStart !== undefined ? (breakStart ? buildISTTimestamp(targetDate, breakStart) : null) : existing.break_start;
+    let finalBreakEnd = breakEnd !== undefined ? (breakEnd ? buildISTTimestamp(targetDate, breakEnd) : null) : existing.break_end;
+    if (finalBreakStart && finalBreakEnd && new Date(finalBreakEnd).getTime() <= new Date(finalBreakStart).getTime()) {
+      finalBreakEnd = new Date(new Date(finalBreakEnd).getTime() + 24 * 60 * 60 * 1000).toISOString();
+    }
     let finalBreakHours = 0;
 
     if (breakHours !== undefined && breakHours !== null) {
@@ -420,19 +602,32 @@ router.put("/attendance/manual-log", async (req, res) => {
     const standardShift = Number(staffMember?.standard_shift_hours) || 9;
     const cutoff = Number(staffMember?.half_day_cutoff_hours) || 5;
 
+    let finalIn = clockIn ? buildISTTimestamp(workDate, clockIn) : null;
+    let finalOut = clockOut ? buildISTTimestamp(workDate, clockOut) : null;
+    let finalBreakStart = breakStart ? buildISTTimestamp(workDate, breakStart) : null;
+    let finalBreakEnd = breakEnd ? buildISTTimestamp(workDate, breakEnd) : null;
+
+    // Roll forward 24h if overnight shift or break
+    if (finalIn && finalOut && new Date(finalOut).getTime() <= new Date(finalIn).getTime()) {
+      finalOut = new Date(new Date(finalOut).getTime() + 24 * 60 * 60 * 1000).toISOString();
+    }
+    if (finalBreakStart && finalBreakEnd && new Date(finalBreakEnd).getTime() <= new Date(finalBreakStart).getTime()) {
+      finalBreakEnd = new Date(new Date(finalBreakEnd).getTime() + 24 * 60 * 60 * 1000).toISOString();
+    }
+
     let computedBreak = breakHours !== undefined ? Number(breakHours) : 0;
-    if (breakStart && breakEnd && breakHours === undefined) {
-      const bIn = new Date(breakStart).getTime();
-      const bOut = new Date(breakEnd).getTime();
+    if (finalBreakStart && finalBreakEnd && breakHours === undefined) {
+      const bIn = new Date(finalBreakStart).getTime();
+      const bOut = new Date(finalBreakEnd).getTime();
       computedBreak = Math.max(0, Math.round(((bOut - bIn) / 3600000) * 100) / 100);
     }
 
     let computedWorked = workedHours !== undefined ? Number(workedHours) : 0;
     let computedOT = overtimeHours !== undefined ? Number(overtimeHours) : 0;
 
-    if (clockIn && clockOut && workedHours === undefined) {
-      const inMs = new Date(clockIn).getTime();
-      const outMs = new Date(clockOut).getTime();
+    if (finalIn && finalOut && workedHours === undefined) {
+      const inMs = new Date(finalIn).getTime();
+      const outMs = new Date(finalOut).getTime();
       const grossSpan = Math.max(0, (outMs - inMs) / 3600000);
       computedWorked = Math.max(0, Math.round((grossSpan - computedBreak) * 100) / 100);
       computedOT = Math.max(0, Math.round((computedWorked - standardShift) * 100) / 100);
@@ -447,18 +642,18 @@ router.put("/attendance/manual-log", async (req, res) => {
       staff_id: staffId,
       work_date: workDate,
       status: finalStatus,
-      clock_in: clockIn || null,
-      clock_out: clockOut || null,
+      clock_in: finalIn,
+      clock_out: finalOut,
       break_hours: computedBreak,
       worked_hours: computedWorked,
       overtime_hours: computedOT,
-      is_manual_in: Boolean(clockIn),
-      is_manual_out: Boolean(clockOut),
+      is_manual_in: Boolean(finalIn),
+      is_manual_out: Boolean(finalOut),
       notes: notes || null,
       updated_at: new Date().toISOString(),
     };
-    if (breakStart) upsertPayload.break_start = breakStart;
-    if (breakEnd) upsertPayload.break_end = breakEnd;
+    if (finalBreakStart) upsertPayload.break_start = finalBreakStart;
+    if (finalBreakEnd) upsertPayload.break_end = finalBreakEnd;
 
     const { data, error } = await supabase
       .from("staff_attendance")
