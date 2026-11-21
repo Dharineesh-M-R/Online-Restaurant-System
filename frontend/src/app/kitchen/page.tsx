@@ -79,8 +79,9 @@ export default function KitchenDashboard() {
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
   const router = useRouter();
+  const [isAuthorized, setIsAuthorized] = useState(false);
 
-  // Shift Expiry Logic
+  // Shift Expiry & Role Verification Logic: Kitchen / Chef ONLY
   useEffect(() => {
     const role = localStorage.getItem("staff_role");
     const expiry = localStorage.getItem("staff_expiry");
@@ -89,16 +90,27 @@ export default function KitchenDashboard() {
     const staffName = localStorage.getItem("staff_name") || "";
     const now = new Date().getTime();
 
-    if (role !== "kitchen" || !expiry || now > parseInt(expiry)) {
+    if (!role || !expiry || now > parseInt(expiry)) {
       localStorage.clear();
       router.push("/login");
-    } else {
-      setCurrentChef({
-        id: staffDbId,
-        name: staffName,
-        employeeId: staffId,
-      });
+      return;
     }
+
+    if (role !== "kitchen") {
+      // Kitchen page is strictly for chefs
+      if (role === "waiter") router.push("/waiter");
+      else if (role === "billing") router.push("/billing");
+      else if (role === "manager") router.push("/management");
+      else router.push("/login");
+      return;
+    }
+
+    setCurrentChef({
+      id: staffDbId,
+      name: staffName,
+      employeeId: staffId,
+    });
+    setIsAuthorized(true);
   }, [router]);
 
   // Fetch Orders
@@ -375,12 +387,12 @@ export default function KitchenDashboard() {
 
   const allDayData = getAllDayTotals();
 
-  if (loading) {
+  if (!isAuthorized || loading) {
     return (
       <div className="min-h-screen bg-[#faf9f6] flex flex-col items-center justify-center text-stone-500 font-sans">
         <ChefHat size={48} className="animate-bounce mb-3 text-orange-500" />
         <h2 className="text-lg font-black uppercase tracking-widest text-stone-900">
-          Initializing Kitchen Display...
+          {!isAuthorized ? "Authenticating Kitchen Terminal..." : "Initializing Kitchen Display..."}
         </h2>
         <p className="text-xs text-stone-400 font-bold mt-1">Connecting to live station queue</p>
       </div>

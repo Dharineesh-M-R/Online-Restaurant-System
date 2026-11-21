@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { getApiUrl } from "@/lib/utils";
 import {
   Search,
   ChevronDown,
@@ -11,6 +12,10 @@ import {
   UtensilsCrossed,
   Check,
   AlertCircle,
+  QrCode,
+  Download,
+  Copy,
+  ExternalLink,
 } from "lucide-react";
 
 interface Category {
@@ -33,6 +38,8 @@ export default function MenuEditor() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [menuSearch, setMenuSearch] = useState("");
+  const [showQrModal, setShowQrModal] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
   const [menuCategoryFilter, setMenuCategoryFilter] = useState("All");
 
   const [isMenuModalOpen, setIsMenuModalOpen] = useState(false);
@@ -45,7 +52,40 @@ export default function MenuEditor() {
     is_available: true,
   });
 
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+  const apiUrl = getApiUrl();
+
+  // QR URL Generator
+  const currentOrigin =
+    typeof window !== "undefined" ? window.location.origin : "http://localhost:3000";
+  const menuQrUrl = `${currentOrigin}/menu`;
+  const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=10&data=${encodeURIComponent(
+    menuQrUrl
+  )}`;
+
+  const handleCopyLink = () => {
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      navigator.clipboard.writeText(menuQrUrl);
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 2500);
+    }
+  };
+
+  const handleDownloadQr = async () => {
+    try {
+      const response = await fetch(qrImageUrl);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "foodie-delight-view-only-menu-qr.png";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch {
+      window.open(qrImageUrl, "_blank");
+    }
+  };
 
   const fetchData = async () => {
     try {
@@ -225,7 +265,15 @@ export default function MenuEditor() {
               size={15}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none"
             />
-          </div>
+          </div>          {/* View-Only Menu QR Trigger */}
+          <button
+            onClick={() => setShowQrModal(true)}
+            className="bg-white border border-stone-200 hover:bg-stone-50 text-stone-800 px-3.5 py-2.5 rounded-2xl font-black text-xs uppercase tracking-wider flex items-center gap-1.5 transition active:scale-95 shadow-2xs cursor-pointer"
+            title="Generate printable public menu QR code"
+          >
+            <QrCode size={16} className="text-orange-600" />
+            <span className="hidden sm:inline">View-Only</span> Menu QR
+          </button>
 
           <button
             onClick={openAddModal}
@@ -427,6 +475,84 @@ export default function MenuEditor() {
               </div>
             </form>
 
+          </div>
+        </div>
+      )}
+      {/* ========================================================================= */}
+      {/* MODAL: VIEW-ONLY PUBLIC MENU QR CODE GENERATOR */}
+      {/* ========================================================================= */}
+      {showQrModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-950/60 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white w-full max-w-md rounded-3xl p-6 shadow-2xl border border-stone-200 animate-in zoom-in-95">
+            
+            {/* Modal Header */}
+            <div className="flex justify-between items-center mb-4 pb-2 border-b border-stone-100">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center">
+                  <QrCode size={18} />
+                </div>
+                <h3 className="text-base font-black text-stone-900">
+                  View-Only Menu QR Standee
+                </h3>
+              </div>
+              <button
+                onClick={() => setShowQrModal(false)}
+                className="p-1.5 rounded-full hover:bg-stone-100 text-stone-400 hover:text-stone-700 transition cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <p className="text-xs text-stone-500 font-medium mb-4 leading-relaxed">
+              Print or display this scannable QR code at your entrance, waiting lobby, window stickers, or takeout flyers for contactless menu browsing without table ordering.
+            </p>
+
+            {/* QR Code Graphic Container */}
+            <div className="bg-[#faf9f6] p-6 rounded-3xl border border-stone-200/80 flex flex-col items-center justify-center text-center mb-4">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={qrImageUrl}
+                alt="View-Only Menu QR Code"
+                width={200}
+                height={200}
+                className="rounded-2xl border-2 border-white shadow-md bg-white p-2 mb-3"
+              />
+              <span className="text-xs font-black text-stone-900">
+                Public View-Only Menu
+              </span>
+              <span className="text-[10px] text-stone-400 font-mono mt-0.5 max-w-xs truncate">
+                {menuQrUrl}
+              </span>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="grid grid-cols-2 gap-2 mb-2">
+              <button
+                onClick={handleDownloadQr}
+                className="flex items-center justify-center gap-1.5 py-2.5 bg-orange-600 hover:bg-orange-700 text-white rounded-xl text-xs font-black shadow-xs shadow-orange-600/20 transition cursor-pointer"
+              >
+                <Download size={14} />
+                <span>Download PNG</span>
+              </button>
+
+              <button
+                onClick={handleCopyLink}
+                className="flex items-center justify-center gap-1.5 py-2.5 bg-stone-100 hover:bg-stone-200 text-stone-800 rounded-xl text-xs font-bold transition cursor-pointer"
+              >
+                <Copy size={14} />
+                <span>{copiedLink ? "Link Copied!" : "Copy Link"}</span>
+              </button>
+            </div>
+
+            <a
+              href={menuQrUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full flex items-center justify-center gap-1 text-[11px] text-stone-500 hover:text-orange-600 font-bold py-1.5 text-center transition"
+            >
+              <span>Test /menu in New Tab</span>
+              <ExternalLink size={12} />
+            </a>
           </div>
         </div>
       )}

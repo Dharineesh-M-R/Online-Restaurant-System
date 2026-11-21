@@ -67,6 +67,8 @@ router.get("/staff-config", async (req, res) => {
 
         return {
           ...s,
+          name: s.name || "Staff Member",
+          employee_id: s.employee_id || (s.id ? `STF${String(s.id).slice(-4).toUpperCase()}` : "STF001"),
           phone: s.phone || fallbackPhone || null,
           role: s.role || "waiter",
           wage_type: s.wage_type || "monthly",

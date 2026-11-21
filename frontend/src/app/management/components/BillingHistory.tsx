@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { getApiUrl } from "@/lib/utils";
 import {
   Search,
   TrendingUp,
@@ -51,7 +52,7 @@ export default function BillingHistory() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [loadingDetails, setLoadingDetails] = useState(false);
 
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+  const apiUrl = getApiUrl();
 
   // Force JS to parse the database string as UTC 
   // so it correctly converts it to local Indian Standard Time (IST)

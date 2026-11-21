@@ -20,20 +20,40 @@ import BillingHistory from "./components/BillingHistory";
 import MenuEditor from "./components/MenuEditor";
 import OverviewMetrics from "./components/OverviewMetrics";
 import StaffRoster from "./components/StaffRoster";
+import GuestFeedback from "./components/GuestFeedback";
 
 export default function ManagementDashboard() {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [isAuthorized, setIsAuthorized] = useState(false);
   const router = useRouter();
 
-  // Auth Check
+  // Auth Check: STRICT RESTAURANT MANAGER ONLY (Billing staff, chefs, and waiters are barred)
   useEffect(() => {
     const role = localStorage.getItem("staff_role");
-    if (role !== "billing" && role !== "manager") {
+    const expiry = localStorage.getItem("staff_expiry");
+    const now = new Date().getTime();
+
+    if (!role || !expiry || now > parseInt(expiry)) {
+      localStorage.clear();
       router.push("/login");
-    } else {
-      setIsAuthorized(true);
+      return;
     }
+
+    if (role !== "manager") {
+      // Role-specific redirect: Billing staff must only access billing page
+      if (role === "billing") {
+        router.push("/billing");
+      } else if (role === "waiter") {
+        router.push("/waiter");
+      } else if (role === "kitchen") {
+        router.push("/kitchen");
+      } else {
+        router.push("/login");
+      }
+      return;
+    }
+
+    setIsAuthorized(true);
   }, [router]);
 
   const handleLogout = () => {
@@ -143,6 +163,8 @@ export default function ManagementDashboard() {
                   ? "Menu Item Catalog"
                   : activeTab === "staff"
                   ? "Staff Roster & Scheduling Hub"
+                  : activeTab === "reviews"
+                  ? "Guest Feedback & Review Intelligence"
                   : activeTab}
               </h2>
             </div>
@@ -152,10 +174,10 @@ export default function ManagementDashboard() {
           </div>
 
           {/* Mobile Tab Pills */}
-          <div className="flex md:hidden gap-1 bg-stone-100 p-1 rounded-xl">
+          <div className="flex md:hidden gap-1 bg-stone-100 p-1 rounded-xl overflow-x-auto">
             <button
               onClick={() => setActiveTab("dashboard")}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold shrink-0 ${
                 activeTab === "dashboard" ? "bg-white text-stone-900 shadow-xs" : "text-stone-600"
               }`}
             >
@@ -163,7 +185,7 @@ export default function ManagementDashboard() {
             </button>
             <button
               onClick={() => setActiveTab("billing")}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold shrink-0 ${
                 activeTab === "billing" ? "bg-white text-stone-900 shadow-xs" : "text-stone-600"
               }`}
             >
@@ -171,7 +193,7 @@ export default function ManagementDashboard() {
             </button>
             <button
               onClick={() => setActiveTab("menu")}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold shrink-0 ${
                 activeTab === "menu" ? "bg-white text-stone-900 shadow-xs" : "text-stone-600"
               }`}
             >
@@ -179,11 +201,19 @@ export default function ManagementDashboard() {
             </button>
             <button
               onClick={() => setActiveTab("staff")}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold shrink-0 ${
                 activeTab === "staff" ? "bg-white text-stone-900 shadow-xs" : "text-stone-600"
               }`}
             >
               Staff
+            </button>
+            <button
+              onClick={() => setActiveTab("reviews")}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold shrink-0 ${
+                activeTab === "reviews" ? "bg-white text-stone-900 shadow-xs" : "text-stone-600"
+              }`}
+            >
+              Feedback
             </button>
           </div>
         </header>
@@ -194,8 +224,13 @@ export default function ManagementDashboard() {
           {activeTab === "billing" && <BillingHistory />}
           {activeTab === "menu" && <MenuEditor />}
           {activeTab === "staff" && <StaffRoster />}
+          {activeTab === "reviews" && <GuestFeedback />}
 
-          {activeTab !== "dashboard" && activeTab !== "billing" && activeTab !== "menu" && activeTab !== "staff" && (
+          {activeTab !== "dashboard" &&
+            activeTab !== "billing" &&
+            activeTab !== "menu" &&
+            activeTab !== "staff" &&
+            activeTab !== "reviews" && (
             <div className="h-full flex flex-col items-center justify-center text-center p-8">
               <div className="w-16 h-16 rounded-3xl bg-stone-100 flex items-center justify-center text-stone-400 mb-4">
                 <LayoutDashboard size={32} />

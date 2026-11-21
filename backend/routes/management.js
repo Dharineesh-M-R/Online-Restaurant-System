@@ -608,8 +608,8 @@ router.post("/staff", async (req, res) => {
     const newUuid = randomUUID();
     let finalId = newUuid;
 
-    // Database check constraint allows ONLY ('waiter', 'kitchen', 'billing')
-    const dbRole = validRole === "manager" ? "billing" : validRole;
+    // Valid roles: waiter, kitchen, billing, manager
+    const dbRole = validRole;
 
     // Attempt insert into Supabase staff table
     try {

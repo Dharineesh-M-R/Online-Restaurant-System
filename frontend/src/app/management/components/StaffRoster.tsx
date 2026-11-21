@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback } from "react";
+import { getApiUrl } from "@/lib/utils";
 import {
   Clock,
   CheckCircle2,
@@ -192,7 +193,7 @@ function toISTTimeInput(isoStr: string | null | undefined): string {
 const toLocalTimeInputValue = toISTTimeInput;
 
 export default function StaffRoster() {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+  const apiUrl = getApiUrl();
 
   // Active Top Tab (5 Tabs)
   const [activeTab, setActiveTab] = useState<"today" | "register" | "khata" | "payroll" | "team">("today");
@@ -363,27 +364,79 @@ export default function StaffRoster() {
   // DATA FETCHING FUNCTIONS
   // ==========================================
 
-  // Fetch Staff Config
+  // Helper for resilient API calls with local fallback
+  const fetchApi = useCallback(async (endpoint: string, options?: RequestInit) => {
+    const base = apiUrl || getApiUrl();
+    try {
+      return await fetch(`${base}${endpoint}`, options);
+    } catch (primaryErr) {
+      if (base !== "http://localhost:5000") {
+        try {
+          return await fetch(`http://localhost:5000${endpoint}`, options);
+        } catch {
+          throw primaryErr;
+        }
+      }
+      throw primaryErr;
+    }
+  }, [apiUrl]);
+
+  // Fetch Staff Config (Primary /management/hr/staff-config with resilient fallback to /management/staff)
   const fetchStaffConfigs = useCallback(async () => {
     try {
       setLoadingStaff(true);
-      const res = await fetch(`${apiUrl}/management/hr/staff-config`);
-      if (res.ok) {
-        const data = await res.json();
-        setStaffConfigs(data.staff || []);
+      let list: StaffConfig[] = [];
+      try {
+        const res = await fetchApi("/management/hr/staff-config");
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data.staff) && data.staff.length > 0) {
+            list = data.staff;
+          }
+        }
+      } catch (err) {
+        console.warn("Primary staff-config fetch failed, trying fallback:", err);
+      }
+
+      if (list.length === 0) {
+        try {
+          const fallbackRes = await fetchApi("/management/staff");
+          if (fallbackRes.ok) {
+            const fallbackData = await fallbackRes.json();
+            if (Array.isArray(fallbackData.staff) && fallbackData.staff.length > 0) {
+              list = fallbackData.staff.map((s: any) => ({
+                ...s,
+                is_active: s.status !== "inactive" && s.is_active !== false,
+                base_rate: s.base_rate || s.hourly_wage || 0,
+                wage_type: s.wage_type || (s.hourly_wage ? "hourly" : "monthly"),
+                standard_shift_hours: s.standard_shift_hours || 9,
+                half_day_cutoff_hours: s.half_day_cutoff_hours || 5,
+                overtime_hourly_rate: s.overtime_hourly_rate || 100,
+                paid_weekly_offs_per_month: s.paid_weekly_offs_per_month ?? 4,
+                default_break_hours: s.default_break_hours ?? 2,
+              }));
+            }
+          }
+        } catch (fbErr) {
+          console.warn("Fallback /management/staff fetch failed:", fbErr);
+        }
+      }
+
+      if (list.length > 0) {
+        setStaffConfigs(list);
       }
     } catch {
       showToast("Error loading staff configuration", "error");
     } finally {
       setLoadingStaff(false);
     }
-  }, [apiUrl]);
+  }, [fetchApi]);
 
   // Fetch Today's Desk
   const fetchTodayDesk = useCallback(async () => {
     try {
       setLoadingToday(true);
-      const res = await fetch(`${apiUrl}/management/hr/attendance?date=${todayDate}`);
+      const res = await fetchApi(`/management/hr/attendance?date=${todayDate}`);
       if (res.ok) {
         const data = await res.json();
         setTodayAttendance(data.attendance || []);
@@ -394,13 +447,13 @@ export default function StaffRoster() {
     } finally {
       setLoadingToday(false);
     }
-  }, [apiUrl, todayDate]);
+  }, [fetchApi, todayDate]);
 
   // Fetch Monthly Register
   const fetchRegister = useCallback(async () => {
     try {
       setLoadingRegister(true);
-      const res = await fetch(`${apiUrl}/management/hr/attendance?date=${registerDate}`);
+      const res = await fetchApi(`/management/hr/attendance?date=${registerDate}`);
       if (res.ok) {
         const data = await res.json();
         setRegisterAttendance(data.attendance || []);
@@ -423,13 +476,13 @@ export default function StaffRoster() {
     } finally {
       setLoadingRegister(false);
     }
-  }, [apiUrl, registerDate]);
+  }, [fetchApi, registerDate]);
 
   // Fetch Khata Advances
   const fetchKhata = useCallback(async () => {
     try {
       setLoadingKhata(true);
-      const res = await fetch(`${apiUrl}/management/hr/khata`);
+      const res = await fetchApi("/management/hr/khata");
       if (res.ok) {
         const data = await res.json();
         setAdvancesList(data.advances || []);
@@ -441,13 +494,13 @@ export default function StaffRoster() {
     } finally {
       setLoadingKhata(false);
     }
-  }, [apiUrl]);
+  }, [fetchApi]);
 
   // Fetch Monthly Payroll
   const fetchPayroll = useCallback(async () => {
     try {
       setLoadingPayroll(true);
-      const res = await fetch(`${apiUrl}/management/hr/payroll?month=${selectedMonth}&year=${selectedYear}`);
+      const res = await fetchApi(`/management/hr/payroll?month=${selectedMonth}&year=${selectedYear}`);
       if (res.ok) {
         const data = await res.json();
         setPayrollData(data.payroll || []);
@@ -457,7 +510,7 @@ export default function StaffRoster() {
     } finally {
       setLoadingPayroll(false);
     }
-  }, [apiUrl, selectedMonth, selectedYear]);
+  }, [fetchApi, selectedMonth, selectedYear]);
 
   // Initial Load & Tab Switching
   useEffect(() => {
@@ -1008,13 +1061,18 @@ export default function StaffRoster() {
 
   const filteredTeamMembers = useMemo(() => {
     return staffConfigs.filter((s) => {
-      const search = teamSearch.toLowerCase().trim();
+      const search = (teamSearch || "").toLowerCase().trim();
+      const sName = (s.name || "").toLowerCase();
+      const sEmpId = (s.employee_id || "").toLowerCase();
+      const sRole = (s.role || "").toLowerCase();
+      const sPhone = s.phone ? String(s.phone) : "";
+
       const matchesSearch =
         !search ||
-        s.name.toLowerCase().includes(search) ||
-        s.employee_id.toLowerCase().includes(search) ||
-        s.role.toLowerCase().includes(search) ||
-        (s.phone && s.phone.includes(search));
+        sName.includes(search) ||
+        sEmpId.includes(search) ||
+        sRole.includes(search) ||
+        sPhone.includes(search);
 
       const matchesRole = teamRoleFilter === "all" || s.role === teamRoleFilter;
       const matchesStatus =
@@ -1022,7 +1080,7 @@ export default function StaffRoster() {
         (teamStatusFilter === "active" && s.is_active !== false) ||
         (teamStatusFilter === "inactive" && s.is_active === false);
 
-      return matchesSearch && matchesRole && matchesStatus;
+      return Boolean(matchesSearch && matchesRole && matchesStatus);
     });
   }, [staffConfigs, teamSearch, teamRoleFilter, teamStatusFilter]);
 
@@ -1890,7 +1948,11 @@ export default function StaffRoster() {
                     className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-bold text-stone-900"
                     required
                   >
-                    <option value="">-- Choose Employee --</option>
+                    <option value="">
+                      {loadingStaff && staffConfigs.length === 0
+                        ? "-- Loading employees... --"
+                        : "-- Choose Employee --"}
+                    </option>
                     {staffConfigs
                       .filter((s) => s.is_active !== false)
                       .map((s) => (
@@ -2493,7 +2555,7 @@ export default function StaffRoster() {
                 <option value="waiter">Waiters</option>
                 <option value="kitchen">Kitchen Chefs</option>
                 <option value="billing">Billing Cashiers</option>
-                <option value="manager">Floor Managers</option>
+                <option value="manager">Restaurant Managers</option>
               </select>
 
               {/* Status Filter */}
@@ -2566,7 +2628,16 @@ export default function StaffRoster() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100">
-                  {filteredTeamMembers.length === 0 ? (
+                  {loadingStaff && staffConfigs.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="py-12 text-center text-stone-400 font-medium">
+                        <div className="flex flex-col items-center justify-center gap-2">
+                          <RefreshCw size={22} className="animate-spin text-orange-600" />
+                          <span className="text-xs font-bold text-stone-600">Loading team directory & credentials...</span>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : filteredTeamMembers.length === 0 ? (
                     <tr>
                       <td colSpan={7} className="py-8 text-center text-stone-400 font-medium">
                         No team members matching your search or filter criteria.
@@ -2600,11 +2671,11 @@ export default function StaffRoster() {
                                     : "bg-stone-900"
                                 }`}
                               >
-                                {staff.name.slice(0, 2).toUpperCase()}
+                                {(staff.name || "ST").slice(0, 2).toUpperCase()}
                               </div>
                               <div>
                                 <p className="font-black text-stone-900 text-xs flex items-center gap-1.5">
-                                  <span>{staff.name}</span>
+                                  <span>{staff.name || "Staff Member"}</span>
                                   {!isActive && (
                                     <span className="text-[9px] font-bold uppercase px-1.5 py-0.2 rounded bg-stone-200 text-stone-600">
                                       Former
@@ -2621,7 +2692,7 @@ export default function StaffRoster() {
                           {/* Employee ID */}
                           <td className="py-3.5 px-4">
                             <span className="px-2.5 py-1 bg-stone-100 border border-stone-200 rounded-lg text-xs font-mono font-black text-stone-800">
-                              {staff.employee_id}
+                              {staff.employee_id || "—"}
                             </span>
                           </td>
 
@@ -3059,7 +3130,7 @@ export default function StaffRoster() {
                     <option value="waiter">Waiter</option>
                     <option value="kitchen">Kitchen Chef</option>
                     <option value="billing">Billing Cashier</option>
-                    <option value="manager">Floor Manager</option>
+                    <option value="manager">Restaurant Manager</option>
                   </select>
                 </div>
               </div>
@@ -3239,7 +3310,7 @@ export default function StaffRoster() {
                     <option value="waiter">Waiter</option>
                     <option value="kitchen">Kitchen Chef</option>
                     <option value="billing">Billing Cashier</option>
-                    <option value="manager">Floor Manager</option>
+                    <option value="manager">Restaurant Manager</option>
                   </select>
                 </div>
 

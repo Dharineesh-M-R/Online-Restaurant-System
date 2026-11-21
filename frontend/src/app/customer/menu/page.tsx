@@ -19,14 +19,16 @@ import {
 import Link from "next/link";
 import { useCart } from "@/context/CartContext";
 import { Dish } from "@/types/cart";
+import { getApiUrl } from "@/lib/utils";
 
 export default function MenuPage() {
-  const { cart, addToCart, updateQuantity, cartCount, isLoaded, tableNumber } =
+  const { cart, addToCart, updateQuantity, updateNotes, cartCount, isLoaded, tableNumber } =
     useCart();
 
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [selectedDish, setSelectedDish] = useState<Dish | null>(null);
+  const [dishNotes, setDishNotes] = useState("");
 
   const [categories, setCategories] = useState<string[]>(["All"]);
   const [dishes, setDishes] = useState<Dish[]>([]);
@@ -42,13 +44,41 @@ export default function MenuPage() {
 
   const isParcel = Number(tableNumber) > 100;
 
+  // Sync notes when selectedDish changes
+  useEffect(() => {
+    if (selectedDish) {
+      const item = cart.find((i) => i.id === selectedDish.id);
+      setDishNotes(item?.notes || "");
+    } else {
+      setDishNotes("");
+    }
+  }, [selectedDish]);
+
+  const handleNotesChange = (text: string) => {
+    setDishNotes(text);
+    if (selectedDish) {
+      const inCart = cart.find((i) => i.id === selectedDish.id);
+      if (inCart) {
+        updateNotes(selectedDish.id, text);
+      }
+    }
+  };
+
+  const handleAddFromSheet = () => {
+    if (!selectedDish) return;
+    addToCart(selectedDish);
+    if (dishNotes.trim()) {
+      updateNotes(selectedDish.id, dishNotes.trim());
+    }
+  };
+
   const callWaiter = async () => {
     if (isCallingWaiter || waiterNotified) return;
     setIsCallingWaiter(true);
 
     try {
       const apiUrl =
-        process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+        getApiUrl();
       const res = await fetch(`${apiUrl}/menu/call-waiter`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -69,7 +99,7 @@ export default function MenuPage() {
     const fetchMenuData = async () => {
       try {
         const apiUrl =
-          process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+          getApiUrl();
 
         const categoryRes = await fetch(`${apiUrl}/menu/categories`);
         if (!categoryRes.ok) throw new Error("Failed to fetch categories");
@@ -332,125 +362,280 @@ export default function MenuPage() {
             )}
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {filteredDishes.map((dish) => {
-              const quantity = getDishQuantity(dish.id);
-              const isDishVeg = dish.isVeg ?? (!dish.category?.toLowerCase().includes("non veg"));
+          <>
+            {/* 1. Mobile Horizontal List (< 768px - Swiggy/Zomato style) */}
+            <div className="flex flex-col gap-3 md:hidden">
+              {filteredDishes.map((dish) => {
+                const quantity = getDishQuantity(dish.id);
+                const isDishVeg = dish.isVeg ?? (!dish.category?.toLowerCase().includes("non veg"));
+                const cartItem = cart.find((i) => i.id === dish.id);
 
-              return (
-                <div
-                  key={dish.id}
-                  className="bg-white rounded-3xl p-3.5 border border-stone-200/70 shadow-xs hover:shadow-md hover:border-stone-300 transition-all flex flex-col justify-between group"
-                >
-                  <div>
-                    {/* Dish Image Container */}
-                    <div className="relative rounded-2xl overflow-hidden mb-3 aspect-4/3 bg-stone-100">
+                return (
+                  <div
+                    key={dish.id}
+                    onClick={() => setSelectedDish(dish)}
+                    className={`bg-white rounded-2xl p-3.5 border border-stone-200/80 shadow-xs flex items-center justify-between gap-3 active:scale-[0.99] transition-all cursor-pointer ${
+                      dish.isAvailable === false ? "opacity-60 bg-stone-50/60" : "hover:border-stone-300"
+                    }`}
+                  >
+                    {/* Left Column (flex-1 min-w-0 pr-2) */}
+                    <div className="flex-1 min-w-0 pr-2">
+                      {/* Veg / Non-Veg Indicator + Category */}
+                      <div className="flex items-center gap-2 mb-1">
+                        <div
+                          className={`w-3.5 h-3.5 border rounded-xs flex items-center justify-center shrink-0 ${
+                            isDishVeg ? "border-emerald-600" : "border-rose-600"
+                          }`}
+                        >
+                          <div
+                            className={`w-1.5 h-1.5 rounded-full ${
+                              isDishVeg ? "bg-emerald-600" : "bg-rose-600"
+                            }`}
+                          />
+                        </div>
+                        {dish.category && (
+                          <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider truncate">
+                            {dish.category}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Dish Name */}
+                      <h3 className="font-bold text-gray-900 text-[15px] leading-snug line-clamp-1">
+                        {dish.name}
+                      </h3>
+
+                      {/* Price (Directly below, no 'PRICE' label) */}
+                      <p className="font-black text-gray-900 text-sm mt-0.5">
+                        ₹{dish.price}
+                      </p>
+
+                      {/* Short 2-line Description */}
+                      <p className="text-xs text-gray-500 line-clamp-2 mt-1 leading-relaxed font-normal">
+                        {dish.description ||
+                          "Authentic chef's recipe made with fresh ingredients and signature spices."}
+                      </p>
+
+                      {/* Note indicator if note added */}
+                      {cartItem?.notes && (
+                        <p className="text-[10px] text-orange-600 font-bold mt-1.5 truncate">
+                          Note: {cartItem.notes}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Right Column (relative w-[108px] h-[108px] shrink-0) */}
+                    <div className="relative w-[108px] h-[108px] shrink-0 mb-2">
                       <img
                         src={dish.image || "/dish.jpg"}
                         alt={dish.name}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                        className="w-full h-full object-cover rounded-2xl bg-stone-100"
                         onError={(e) => {
                           (e.target as HTMLImageElement).src = "/dish.jpg";
                         }}
                       />
-                      
-                      {/* Dietary Tag Badge */}
-                      <div className="absolute top-2.5 left-2.5 bg-white/95 backdrop-blur-md px-2 py-1 rounded-lg flex items-center gap-1.5 shadow-xs">
-                        <div className={`w-3 h-3 border rounded-xs flex items-center justify-center ${isDishVeg ? "border-emerald-600" : "border-rose-600"}`}>
-                          <div className={`w-1.5 h-1.5 rounded-full ${isDishVeg ? "bg-emerald-600" : "bg-rose-600"}`} />
-                        </div>
-                        <span className="text-[10px] font-black uppercase tracking-wider text-stone-700">
-                          {isDishVeg ? "Veg" : "Non-Veg"}
-                        </span>
+
+                      {/* Overlapping ADD / Stepper / Out of Stock */}
+                      <div
+                        className="absolute -bottom-2.5 left-1/2 -translate-x-1/2 w-[88px] shadow-md z-10"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {dish.isAvailable === false ? (
+                          <div className="bg-rose-50 border border-rose-200 text-rose-600 font-black text-[9px] py-1.5 rounded-xl uppercase tracking-wider text-center select-none shadow-xs">
+                            Sold Out
+                          </div>
+                        ) : quantity === 0 ? (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              addToCart(dish);
+                            }}
+                            className="w-full bg-orange-600 hover:bg-orange-700 text-white font-black text-xs py-1.5 rounded-xl shadow-md shadow-orange-600/25 active:scale-95 transition-all flex items-center justify-center gap-1 cursor-pointer"
+                          >
+                            <Plus size={13} strokeWidth={3} />
+                            <span>ADD</span>
+                          </button>
+                        ) : (
+                          <div className="flex items-center justify-between bg-stone-900 text-white rounded-xl p-0.5 shadow-md shadow-stone-900/25">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                updateQuantity(dish.id, -1);
+                              }}
+                              className="p-1 hover:bg-stone-800 rounded-lg transition-colors active:scale-90 text-stone-200 cursor-pointer"
+                            >
+                              <Minus size={13} strokeWidth={3} />
+                            </button>
+                            <span className="font-black text-xs text-white px-1">
+                              {quantity}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                updateQuantity(dish.id, 1);
+                              }}
+                              className="p-1 hover:bg-stone-800 rounded-lg transition-colors active:scale-90 text-stone-200 cursor-pointer"
+                            >
+                              <Plus size={13} strokeWidth={3} />
+                            </button>
+                          </div>
+                        )}
                       </div>
-
-                      {/* Sold Out Badge */}
-                      {dish.isAvailable === false && (
-                        <div className="absolute top-2.5 right-2.5 bg-rose-600 text-white text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md shadow-sm">
-                          Out of Stock
-                        </div>
-                      )}
-
-                      {/* Category tag */}
-                      <div className="absolute bottom-2.5 left-2.5 bg-stone-900/80 backdrop-blur-md px-2.5 py-0.5 rounded-md text-[9px] font-bold text-white shadow-xs">
-                        {dish.category}
-                      </div>
-                    </div>
-
-                    {/* Content */}
-                    <div className="px-1">
-                      <div className="flex items-start justify-between gap-2 mb-1">
-                        <h3 className="text-base font-black text-stone-900 leading-snug group-hover:text-orange-600 transition-colors line-clamp-1">
-                          {dish.name}
-                        </h3>
-                      </div>
-
-                      <p className="text-stone-500 text-xs line-clamp-2 leading-relaxed mb-3 min-h-8">
-                        {dish.description || "Authentic chef's recipe made with fresh ingredients and signature spices."}
-                      </p>
                     </div>
                   </div>
+                );
+              })}
+            </div>
 
-                  {/* Price & Action Row */}
-                  <div className="px-1 pt-3 border-t border-stone-100 flex items-center justify-between gap-2 mt-auto">
+            {/* 2. Desktop & Tablet Grid (>= 768px) */}
+            <div className="hidden md:grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              {filteredDishes.map((dish) => {
+                const quantity = getDishQuantity(dish.id);
+                const isDishVeg = dish.isVeg ?? (!dish.category?.toLowerCase().includes("non veg"));
+
+                return (
+                  <div
+                    key={dish.id}
+                    onClick={() => setSelectedDish(dish)}
+                    className="bg-white rounded-3xl p-3.5 border border-stone-200/70 shadow-xs hover:shadow-md hover:border-stone-300 transition-all flex flex-col justify-between group cursor-pointer"
+                  >
                     <div>
-                      <span className="text-[10px] font-bold text-stone-400 uppercase tracking-widest block leading-none">Price</span>
-                      <span className="text-lg font-black text-stone-900">
-                        ₹{dish.price}
-                      </span>
+                      {/* Dish Image Container */}
+                      <div className="relative rounded-2xl overflow-hidden mb-3 aspect-4/3 bg-stone-100">
+                        <img
+                          src={dish.image || "/dish.jpg"}
+                          alt={dish.name}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = "/dish.jpg";
+                          }}
+                        />
+
+                        {/* Dietary Tag Badge */}
+                        <div className="absolute top-2.5 left-2.5 bg-white/95 backdrop-blur-md px-2 py-1 rounded-lg flex items-center gap-1.5 shadow-xs">
+                          <div
+                            className={`w-3 h-3 border rounded-xs flex items-center justify-center ${
+                              isDishVeg ? "border-emerald-600" : "border-rose-600"
+                            }`}
+                          >
+                            <div
+                              className={`w-1.5 h-1.5 rounded-full ${
+                                isDishVeg ? "bg-emerald-600" : "bg-rose-600"
+                              }`}
+                            />
+                          </div>
+                          <span className="text-[10px] font-black uppercase tracking-wider text-stone-700">
+                            {isDishVeg ? "Veg" : "Non-Veg"}
+                          </span>
+                        </div>
+
+                        {/* Sold Out Badge */}
+                        {dish.isAvailable === false && (
+                          <div className="absolute top-2.5 right-2.5 bg-rose-600 text-white text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md shadow-sm">
+                            Out of Stock
+                          </div>
+                        )}
+
+                        {/* Category tag */}
+                        <div className="absolute bottom-2.5 left-2.5 bg-stone-900/80 backdrop-blur-md px-2.5 py-0.5 rounded-md text-[9px] font-bold text-white shadow-xs">
+                          {dish.category}
+                        </div>
+                      </div>
+
+                      {/* Content */}
+                      <div className="px-1">
+                        <div className="flex items-start justify-between gap-2 mb-1">
+                          <h3 className="text-base font-black text-stone-900 leading-snug group-hover:text-orange-600 transition-colors line-clamp-1">
+                            {dish.name}
+                          </h3>
+                        </div>
+
+                        <p className="text-stone-500 text-xs line-clamp-2 leading-relaxed mb-3 min-h-8">
+                          {dish.description ||
+                            "Authentic chef's recipe made with fresh ingredients and signature spices."}
+                        </p>
+                      </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => setSelectedDish(dish)}
-                        className="p-2 text-stone-400 hover:text-stone-700 hover:bg-stone-50 rounded-xl transition-colors"
-                        title="Dish details"
-                      >
-                        <Info size={16} />
-                      </button>
-
-                      {dish.isAvailable === false ? (
-                        <span className="bg-rose-50 border border-rose-200 text-rose-600 font-black text-[10px] px-2.5 py-2 rounded-xl uppercase tracking-wider select-none">
-                          Sold Out
+                    {/* Price & Action Row (no uppercase 'PRICE' label) */}
+                    <div className="px-1 pt-3 border-t border-stone-100 flex items-center justify-between gap-2 mt-auto">
+                      <div>
+                        <span className="text-lg font-black text-stone-900">
+                          ₹{dish.price}
                         </span>
-                      ) : quantity === 0 ? (
+                      </div>
+
+                      <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                         <button
-                          onClick={() => addToCart(dish)}
-                          className="bg-orange-600 hover:bg-orange-700 text-white font-black text-xs px-3.5 py-2.5 rounded-xl shadow-xs hover:shadow-md hover:shadow-orange-600/20 active:scale-90 transition-all flex items-center gap-1 cursor-pointer"
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedDish(dish);
+                          }}
+                          className="p-2 text-stone-400 hover:text-stone-700 hover:bg-stone-50 rounded-xl transition-colors cursor-pointer"
+                          title="Dish details & chef notes"
                         >
-                          <Plus size={14} strokeWidth={3} />
-                          <span>ADD</span>
+                          <Info size={16} />
                         </button>
-                      ) : (
-                        <div className="flex items-center bg-stone-900 text-white rounded-xl p-0.5 shadow-md shadow-stone-900/20">
-                          <button
-                            onClick={() => updateQuantity(dish.id, -1)}
-                            className="p-1.5 hover:bg-stone-800 rounded-lg transition-colors active:scale-90 text-stone-200"
-                          >
-                            <Minus size={14} strokeWidth={3} />
-                          </button>
-                          <span className="w-6 text-center font-black text-xs text-white">
-                            {quantity}
+
+                        {dish.isAvailable === false ? (
+                          <span className="bg-rose-50 border border-rose-200 text-rose-600 font-black text-[10px] px-2.5 py-2 rounded-xl uppercase tracking-wider select-none">
+                            Sold Out
                           </span>
+                        ) : quantity === 0 ? (
                           <button
-                            onClick={() => updateQuantity(dish.id, 1)}
-                            className="p-1.5 hover:bg-stone-800 rounded-lg transition-colors active:scale-90 text-stone-200"
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              addToCart(dish);
+                            }}
+                            className="bg-orange-600 hover:bg-orange-700 text-white font-black text-xs px-3.5 py-2.5 rounded-xl shadow-xs hover:shadow-md hover:shadow-orange-600/20 active:scale-90 transition-all flex items-center gap-1 cursor-pointer"
                           >
                             <Plus size={14} strokeWidth={3} />
+                            <span>ADD</span>
                           </button>
-                        </div>
-                      )}
+                        ) : (
+                          <div className="flex items-center bg-stone-900 text-white rounded-xl p-0.5 shadow-md shadow-stone-900/20">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                updateQuantity(dish.id, -1);
+                              }}
+                              className="p-1.5 hover:bg-stone-800 rounded-lg transition-colors active:scale-90 text-stone-200 cursor-pointer"
+                            >
+                              <Minus size={14} strokeWidth={3} />
+                            </button>
+                            <span className="w-6 text-center font-black text-xs text-white">
+                              {quantity}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                updateQuantity(dish.id, 1);
+                              }}
+                              className="p-1.5 hover:bg-stone-800 rounded-lg transition-colors active:scale-90 text-stone-200 cursor-pointer"
+                            >
+                              <Plus size={14} strokeWidth={3} />
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          </>
         )}
       </div>
 
-      {/* Floating Bottom Cart Pill */}
-      {isLoaded && cartCount > 0 && (
+      {/* Floating Bottom Cart Pill (hidden when Bottom Sheet is open) */}
+      {isLoaded && cartCount > 0 && !selectedDish && (
         <div className="fixed bottom-5 left-4 right-4 z-40 flex justify-center animate-in slide-in-from-bottom-5 duration-300">
           <Link
             href={`/customer/cart?table=${tableNumber}`}
@@ -478,81 +663,152 @@ export default function MenuPage() {
         </div>
       )}
 
-      {/* Dish Info Dialog Modal */}
+      {/* 3. Dish Detail Bottom Sheet / Modal (Slide-up on mobile, centered modal on desktop) */}
       {selectedDish && (
-        <div className="fixed inset-0 bg-stone-950/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-stone-200 animate-in zoom-in-95 duration-200">
-            
-            <div className="relative rounded-2xl overflow-hidden aspect-16/10 mb-4 bg-stone-100">
-              <img
-                src={selectedDish.image || "/dish.jpg"}
-                alt={selectedDish.name}
-                className="w-full h-full object-cover"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).src = "/dish.jpg";
-                }}
-              />
-              <button
-                onClick={() => setSelectedDish(null)}
-                className="absolute top-3 right-3 bg-stone-900/80 hover:bg-stone-900 text-white p-2 rounded-full transition-colors shadow-md"
-              >
-                <X size={18} />
-              </button>
-            </div>
+        <div
+          className="fixed inset-0 bg-stone-950/60 backdrop-blur-sm z-50 flex items-end md:items-center justify-center p-0 md:p-4 animate-in fade-in duration-200"
+          onClick={() => setSelectedDish(null)}
+        >
+          <div
+            className="bg-white w-full md:max-w-md rounded-t-[2rem] md:rounded-3xl shadow-2xl border border-stone-200 max-h-[88vh] overflow-y-auto flex flex-col animate-in slide-in-from-bottom duration-300 md:animate-in md:zoom-in-95 relative"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Mobile Drag Handle */}
+            <div className="w-12 h-1.5 bg-stone-300 rounded-full mx-auto my-3 md:hidden shrink-0" />
 
-            <div className="flex justify-between items-start mb-2">
-              <div>
-                <span className="text-[10px] font-black uppercase tracking-wider text-orange-600 block mb-0.5">
-                  {selectedDish.category}
-                </span>
-                <h2 className="text-xl font-black text-stone-900 leading-tight">
-                  {selectedDish.name}
-                </h2>
+            {/* Close button */}
+            <button
+              onClick={() => setSelectedDish(null)}
+              className="absolute top-3 right-3 bg-stone-900/80 hover:bg-stone-900 text-white p-2 rounded-full transition-colors shadow-md z-10 cursor-pointer"
+            >
+              <X size={18} />
+            </button>
+
+            <div className="p-5 sm:p-6 flex-1 overflow-y-auto">
+              {/* Large Dish Image */}
+              <div className="relative rounded-2xl overflow-hidden aspect-16/10 mb-4 bg-stone-100">
+                <img
+                  src={selectedDish.image || "/dish.jpg"}
+                  alt={selectedDish.name}
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src = "/dish.jpg";
+                  }}
+                />
+
+                {/* Veg / Non-Veg tag on photo */}
+                <div className="absolute top-2.5 left-2.5 bg-white/95 backdrop-blur-md px-2.5 py-1 rounded-lg flex items-center gap-1.5 shadow-xs">
+                  <div
+                    className={`w-3.5 h-3.5 border rounded-xs flex items-center justify-center ${
+                      (selectedDish.isVeg ?? !selectedDish.category?.toLowerCase().includes("non veg"))
+                        ? "border-emerald-600"
+                        : "border-rose-600"
+                    }`}
+                  >
+                    <div
+                      className={`w-1.5 h-1.5 rounded-full ${
+                        (selectedDish.isVeg ?? !selectedDish.category?.toLowerCase().includes("non veg"))
+                          ? "bg-emerald-600"
+                          : "bg-rose-600"
+                      }`}
+                    />
+                  </div>
+                  <span className="text-[10px] font-black uppercase tracking-wider text-stone-700">
+                    {(selectedDish.isVeg ?? !selectedDish.category?.toLowerCase().includes("non veg"))
+                      ? "Veg"
+                      : "Non-Veg"}
+                  </span>
+                </div>
+
+                {selectedDish.isAvailable === false && (
+                  <div className="absolute top-2.5 right-12 bg-rose-600 text-white text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-md shadow-sm">
+                    Out of Stock
+                  </div>
+                )}
               </div>
-              <span className="text-2xl font-black text-stone-900">
-                ₹{selectedDish.price}
-              </span>
+
+              {/* Category & Title & Price */}
+              <div className="flex justify-between items-start gap-3 mb-2">
+                <div>
+                  <span className="text-[10px] font-black uppercase tracking-wider text-orange-600 block mb-0.5">
+                    {selectedDish.category}
+                  </span>
+                  <h2 className="text-xl sm:text-2xl font-black text-stone-900 leading-tight">
+                    {selectedDish.name}
+                  </h2>
+                </div>
+                <span className="text-2xl font-black text-stone-900 shrink-0">
+                  ₹{selectedDish.price}
+                </span>
+              </div>
+
+              {/* Full Untruncated Description */}
+              <p className="text-stone-600 text-xs sm:text-sm leading-relaxed mb-5 font-normal">
+                {selectedDish.description ||
+                  "Prepared fresh to order by our master chefs with regional seasonings and authentic ingredients."}
+              </p>
+
+              {/* Chef Notes / Special Instructions Input */}
+              <div className="bg-stone-50 p-3.5 rounded-2xl border border-stone-200/80 mb-2">
+                <label className="text-[10px] font-black uppercase tracking-wider text-stone-500 block mb-1.5">
+                  Special Instructions / Chef Notes
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Less spicy, extra lemon, well done..."
+                  value={dishNotes}
+                  onChange={(e) => handleNotesChange(e.target.value)}
+                  className="w-full bg-white px-3.5 py-2.5 rounded-xl border border-stone-200 text-xs font-bold text-stone-900 outline-none placeholder:text-stone-400 placeholder:font-normal focus:border-orange-500 transition"
+                  maxLength={120}
+                />
+                <p className="text-[10px] text-stone-400 mt-1">
+                  Note will be shared with the kitchen when you place the order.
+                </p>
+              </div>
             </div>
 
-            <p className="text-stone-600 text-sm leading-relaxed mb-6">
-              {selectedDish.description || "Prepared fresh to order by our master chefs with regional seasonings and authentic ingredients."}
-            </p>
-
-            <div className="pt-4 border-t border-stone-100">
-              {getDishQuantity(selectedDish.id) === 0 ? (
+            {/* Sticky Bottom Action */}
+            <div className="p-4 sm:p-5 border-t border-stone-100 bg-white rounded-b-[2rem] md:rounded-b-3xl">
+              {selectedDish.isAvailable === false ? (
+                <div className="w-full bg-rose-50 border border-rose-200 text-rose-600 py-3.5 rounded-2xl font-black text-xs uppercase tracking-wider text-center select-none">
+                  Item Out of Stock
+                </div>
+              ) : getDishQuantity(selectedDish.id) === 0 ? (
                 <button
-                  onClick={() => addToCart(selectedDish)}
-                  className="w-full bg-orange-600 hover:bg-orange-700 text-white py-3.5 rounded-2xl font-black text-sm tracking-wide shadow-lg shadow-orange-600/25 active:scale-98 transition-all flex items-center justify-center gap-2"
+                  type="button"
+                  onClick={handleAddFromSheet}
+                  className="w-full bg-orange-600 hover:bg-orange-700 text-white py-3.5 rounded-2xl font-black text-sm tracking-wide shadow-lg shadow-orange-600/25 active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <Plus size={18} strokeWidth={3} />
-                  <span>Add to My Order • ₹{selectedDish.price}</span>
+                  <span>Add to Cart — ₹{selectedDish.price}</span>
                 </button>
               ) : (
                 <div className="flex items-center justify-between bg-stone-100 rounded-2xl p-2 border border-stone-200">
                   <button
+                    type="button"
                     onClick={() => updateQuantity(selectedDish.id, -1)}
-                    className="bg-white text-stone-800 p-2.5 rounded-xl shadow-xs hover:bg-stone-50 transition active:scale-90"
+                    className="bg-white text-stone-800 p-2.5 rounded-xl shadow-xs hover:bg-stone-50 transition active:scale-90 cursor-pointer"
                   >
                     <Minus size={18} strokeWidth={3} />
                   </button>
                   <div className="flex flex-col items-center">
                     <span className="text-[10px] font-black text-stone-400 uppercase tracking-widest">
-                      In Your Order
+                      In Cart ({getDishQuantity(selectedDish.id)})
                     </span>
-                    <span className="text-xl font-black text-stone-900">
-                      {getDishQuantity(selectedDish.id)}
+                    <span className="text-lg font-black text-stone-900">
+                      ₹{selectedDish.price * getDishQuantity(selectedDish.id)}
                     </span>
                   </div>
                   <button
+                    type="button"
                     onClick={() => updateQuantity(selectedDish.id, 1)}
-                    className="bg-orange-600 text-white p-2.5 rounded-xl shadow-xs hover:bg-orange-700 transition active:scale-90"
+                    className="bg-orange-600 text-white p-2.5 rounded-xl shadow-xs hover:bg-orange-700 transition active:scale-90 cursor-pointer"
                   >
                     <Plus size={18} strokeWidth={3} />
                   </button>
                 </div>
               )}
             </div>
-
           </div>
         </div>
       )}

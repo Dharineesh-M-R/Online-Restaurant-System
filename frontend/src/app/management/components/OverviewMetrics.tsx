@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { getApiUrl } from "@/lib/utils";
 import {
   TrendingUp,
   TrendingDown,
@@ -90,7 +91,7 @@ export default function OverviewMetrics() {
     "today" | "yesterday" | "week" | "month" | "all"
   >("today");
 
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+  const apiUrl = getApiUrl();
 
   const fetchOverview = async (showSpinner = false) => {
     if (showSpinner) setRefreshing(true);

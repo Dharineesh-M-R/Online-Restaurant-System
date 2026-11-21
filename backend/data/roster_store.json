@@ -29,6 +29,16 @@
       "phone": "98765-43210",
       "hourly_wage": 120,
       "status": "active"
+    },
+    {
+      "id": "a53e6172-c834-43ba-aba7-d8231d177999",
+      "employee_id": "MGR001",
+      "name": "Rajesh Sharma (Manager)",
+      "role": "manager",
+      "pin": "1234",
+      "phone": "98765-43201",
+      "hourly_wage": 200,
+      "status": "active"
     }
   ],
   "shifts": [

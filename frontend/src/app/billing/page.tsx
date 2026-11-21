@@ -21,6 +21,7 @@ import {
   ShoppingBag,
   Clock,
   Sparkles,
+  LayoutDashboard,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -110,19 +111,34 @@ export default function BillingDashboard() {
 
   const selectedTable = tables.find((t) => t.id === selectedTableId) || null;
 
-  // Protect the route
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const [isAuthorized, setIsAuthorized] = useState(false);
+
+  // Protect the route: Billing staff AND Restaurant Manager can access
   useEffect(() => {
     const role = localStorage.getItem("staff_role");
     const expiry = localStorage.getItem("staff_expiry");
     const currentTime = new Date().getTime();
 
-    if (role !== "billing" || !expiry || currentTime > parseInt(expiry)) {
+    if (!role || !expiry || currentTime > parseInt(expiry)) {
       localStorage.removeItem("staff_role");
       localStorage.removeItem("staff_id");
       localStorage.removeItem("staff_name");
       localStorage.removeItem("staff_expiry");
       router.push("/login");
+      return;
     }
+
+    if (role !== "billing" && role !== "manager") {
+      // Role mismatch: redirect appropriately
+      if (role === "waiter") router.push("/waiter");
+      else if (role === "kitchen") router.push("/kitchen");
+      else router.push("/login");
+      return;
+    }
+
+    setUserRole(role);
+    setIsAuthorized(true);
   }, [router]);
 
   const fetchTables = async () => {
@@ -271,7 +287,7 @@ export default function BillingDashboard() {
     return true;
   });
 
-  if (loading) {
+  if (!isAuthorized || loading) {
     return (
       <div className="min-h-screen bg-[#faf9f6] flex flex-col items-center justify-center font-sans">
         <div className="w-12 h-12 border-3 border-orange-500 border-t-transparent rounded-full animate-spin mb-3" />
@@ -297,6 +313,15 @@ export default function BillingDashboard() {
               <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
                 POS Online
               </span>
+              {userRole === "manager" ? (
+                <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-800 border border-purple-200 font-black">
+                  Manager Access
+                </span>
+              ) : (
+                <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-stone-100 text-stone-700 border border-stone-200">
+                  Billing Staff
+                </span>
+              )}
             </div>
             <p className="text-stone-500 text-xs font-medium mt-1">
               Live table settlement, discount management, and payment reconciliation.
@@ -305,13 +330,16 @@ export default function BillingDashboard() {
         </div>
 
         <div className="flex items-center gap-3">
-          <Link
-            href="/management"
-            className="flex items-center gap-1.5 px-4 py-2 bg-white rounded-xl border border-stone-200 text-xs font-black text-stone-700 hover:bg-stone-50 transition shadow-2xs"
-          >
-            <Tag size={15} />
-            <span>Management Portal</span>
-          </Link>
+          {/* ONLY Restaurant Manager can access Management Portal. Billing staff cannot access management page */}
+          {userRole === "manager" && (
+            <Link
+              href="/management"
+              className="flex items-center gap-1.5 px-4 py-2 bg-stone-900 hover:bg-black text-white rounded-xl text-xs font-black transition shadow-xs"
+            >
+              <LayoutDashboard size={15} />
+              <span>Management Portal</span>
+            </Link>
+          )}
 
           <button
             onClick={handleLogout}

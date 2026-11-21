@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   UserCircle,
@@ -13,6 +13,7 @@ import {
   Receipt,
   UtensilsCrossed,
   ShieldCheck,
+  LayoutDashboard,
   Sparkles,
   ArrowLeft,
 } from "lucide-react";
@@ -27,6 +28,20 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+
+  // Check if staff already has an active, valid session
+  useEffect(() => {
+    const role = localStorage.getItem("staff_role");
+    const expiry = localStorage.getItem("staff_expiry");
+    const now = new Date().getTime();
+
+    if (role && expiry && now <= parseInt(expiry)) {
+      if (role === "waiter") router.push("/waiter");
+      else if (role === "kitchen") router.push("/kitchen");
+      else if (role === "billing") router.push("/billing");
+      else if (role === "manager") router.push("/management");
+    }
+  }, [router]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -62,6 +77,7 @@ export default function LoginPage() {
       if (data.role === "waiter") router.push("/waiter");
       else if (data.role === "kitchen") router.push("/kitchen");
       else if (data.role === "billing") router.push("/billing");
+      else if (data.role === "manager") router.push("/management");
       else setError("Unrecognized role assigned to this user.");
     } catch (err: any) {
       setError(err.message);
@@ -111,7 +127,7 @@ export default function LoginPage() {
           <span className="text-[10px] font-black uppercase tracking-widest text-stone-400 block mb-2 text-center">
             Quick Fill Demo Credentials
           </span>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             <button
               type="button"
               onClick={() => fillQuickPreset("WAI001", "1234")}
@@ -150,8 +166,22 @@ export default function LoginPage() {
               }`}
             >
               <Receipt size={16} className="mx-auto mb-1 text-emerald-600" />
-              <span className="text-[11px] font-black block leading-none">Cashier</span>
+              <span className="text-[11px] font-black block leading-none">Billing</span>
               <span className="text-[9px] text-stone-400 block mt-0.5 font-bold">BIL001</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => fillQuickPreset("MGR001", "1234")}
+              className={`p-2.5 rounded-2xl border text-center transition-all cursor-pointer ${
+                employeeId === "MGR001"
+                  ? "bg-purple-50 border-purple-500 text-purple-700"
+                  : "bg-[#faf9f6] border-stone-200 hover:border-stone-300 text-stone-700"
+              }`}
+            >
+              <LayoutDashboard size={16} className="mx-auto mb-1 text-purple-600" />
+              <span className="text-[11px] font-black block leading-none">Manager</span>
+              <span className="text-[9px] text-stone-400 block mt-0.5 font-bold">MGR001</span>
             </button>
           </div>
         </div>
@@ -171,7 +201,7 @@ export default function LoginPage() {
               <input
                 type="text"
                 required
-                placeholder="e.g. WAI001"
+                placeholder="e.g. WAI001 / MGR001"
                 value={employeeId}
                 onChange={(e) => setEmployeeId(e.target.value)}
                 className="w-full pl-11 pr-4 py-3.5 rounded-2xl bg-[#faf9f6] border border-stone-200 focus:border-orange-500 focus:bg-white outline-none transition text-stone-900 font-bold uppercase placeholder:normal-case placeholder:font-normal text-sm"
@@ -233,7 +263,7 @@ export default function LoginPage() {
 
         <div className="mt-5 pt-4 border-t border-stone-100 flex items-center justify-center gap-1.5 text-[11px] text-stone-400 font-bold">
           <ShieldCheck size={14} className="text-emerald-500" />
-          <span>Active 8-Hour Session Lock Protected</span>
+          <span>Role-Based Operational Access Protected</span>
         </div>
 
       </div>

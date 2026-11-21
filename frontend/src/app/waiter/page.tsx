@@ -172,23 +172,37 @@ export default function WaiterDashboard() {
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
   const router = useRouter();
 
+  const [isAuthorized, setIsAuthorized] = useState(false);
+
   useEffect(() => {
     const role = localStorage.getItem("staff_role");
     const expiry = localStorage.getItem("staff_expiry");
     const staffId = localStorage.getItem("staff_id") || "";
     const staffDbId = localStorage.getItem("staff_db_id") || "";
     const staffName = localStorage.getItem("staff_name") || "";
+    const now = new Date().getTime();
 
-    if (role !== "waiter" || !expiry || new Date().getTime() > parseInt(expiry)) {
+    if (!role || !expiry || now > parseInt(expiry)) {
       localStorage.clear();
       router.push("/login");
-    } else {
-      setCurrentStaff({
-        id: staffDbId,
-        name: staffName,
-        employeeId: staffId,
-      });
+      return;
     }
+
+    // Waiter page is strictly for waiters
+    if (role !== "waiter") {
+      if (role === "kitchen") router.push("/kitchen");
+      else if (role === "billing") router.push("/billing");
+      else if (role === "manager") router.push("/management");
+      else router.push("/login");
+      return;
+    }
+
+    setCurrentStaff({
+      id: staffDbId,
+      name: staffName,
+      employeeId: staffId,
+    });
+    setIsAuthorized(true);
   }, [router]);
 
   const fetchTasks = useCallback(async () => {
@@ -625,12 +639,12 @@ export default function WaiterDashboard() {
     return acc;
   }, {} as Record<number, ReadyItem[]>);
 
-  if (loading) {
+  if (!isAuthorized || loading) {
     return (
       <div className="min-h-screen bg-[#faf9f6] flex flex-col items-center justify-center text-stone-500 font-sans">
         <Utensils size={40} className="animate-bounce mb-3 text-orange-500" />
         <p className="font-bold text-xs uppercase tracking-widest">
-          Syncing Waiter Copilot...
+          {!isAuthorized ? "Authenticating Waiter Terminal..." : "Syncing Waiter Copilot..."}
         </p>
       </div>
     );

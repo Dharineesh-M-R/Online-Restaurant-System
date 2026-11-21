@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -21,6 +21,8 @@ import {
   Plus,
   Coffee,
   ChevronRight,
+  Star,
+  Heart,
 } from "lucide-react";
 import { useCart } from "@/context/CartContext";
 
@@ -30,7 +32,63 @@ export default function BillPage() {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [isRequestingLocal, setIsRequestingLocal] = useState(false);
 
+  // In-app Bill Feedback State
+  const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
+  const [feedbackRating, setFeedbackRating] = useState(5);
+  const [feedbackComment, setFeedbackComment] = useState("");
+  const [feedbackTags, setFeedbackTags] = useState<string[]>([]);
+  const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false);
+
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+
+  // Check if feedback already submitted for this session
+  useEffect(() => {
+    if (!sessionId) return;
+    const checkFeedback = async () => {
+      try {
+        const res = await fetch(`${apiUrl}/feedback/session/${sessionId}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.submitted) {
+            setFeedbackSubmitted(true);
+            if (data.feedback?.overall_rating) {
+              setFeedbackRating(data.feedback.overall_rating);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("Could not check session feedback:", err);
+      }
+    };
+    checkFeedback();
+  }, [sessionId, apiUrl]);
+
+  const handleSubmitBillFeedback = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!sessionId || isSubmittingFeedback) return;
+    setIsSubmittingFeedback(true);
+    try {
+      const res = await fetch(`${apiUrl}/feedback`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          source: "bill_request",
+          sessionId,
+          tableNumber: tableNumber ? parseInt(tableNumber, 10) : null,
+          overallRating: feedbackRating,
+          tags: feedbackTags,
+          comment: feedbackComment.trim() || null,
+        }),
+      });
+      if (res.ok) {
+        setFeedbackSubmitted(true);
+      }
+    } catch (err) {
+      console.error("Error submitting bill feedback:", err);
+    } finally {
+      setIsSubmittingFeedback(false);
+    }
+  };
 
   if (!isLoaded) {
     return (
@@ -198,6 +256,123 @@ export default function BillPage() {
                     : "The billing desk has been notified. A waiter will arrive at your table shortly with the bill and payment terminal."}
                 </p>
               </div>
+            )}
+
+            {/* IN-APP DINING FEEDBACK CARD */}
+            {hasItems && (
+              feedbackSubmitted ? (
+                <div className="bg-emerald-50/70 border border-emerald-200 rounded-3xl p-4 flex items-center justify-between gap-3 shadow-2xs">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shrink-0">
+                      <Heart size={18} fill="currentColor" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-black text-stone-900">
+                        Thank you for your {feedbackRating}★ dining feedback!
+                      </p>
+                      <p className="text-[10px] text-stone-500 font-medium">
+                        Your review has been shared with our kitchen and floor team.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex text-amber-400 gap-0.5 shrink-0">
+                    {[1, 2, 3, 4, 5].map((s) => (
+                      <Star
+                        key={s}
+                        size={14}
+                        fill={s <= feedbackRating ? "currentColor" : "none"}
+                        className={s <= feedbackRating ? "text-amber-400" : "text-stone-200"}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className={`bg-white rounded-3xl p-5 border shadow-2xs transition-all ${
+                  isServerBilled ? "border-orange-300 ring-2 ring-orange-500/10" : "border-stone-200/80"
+                }`}>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center">
+                        <Star size={16} fill="currentColor" />
+                      </div>
+                      <div>
+                        <h3 className="text-xs font-black text-stone-900 leading-none">
+                          Rate Your Dining Experience
+                        </h3>
+                        <p className="text-[10px] text-stone-400 font-medium mt-0.5">
+                          {isServerBilled ? "While waiting for the bill / waiter..." : "1-tap quick review"}
+                        </p>
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-black uppercase text-orange-600 bg-orange-50 px-2 py-0.5 rounded-full">
+                      Feedback
+                    </span>
+                  </div>
+
+                  {/* 5 Stars */}
+                  <div className="flex items-center justify-center gap-2 py-2 mb-2 bg-stone-50/80 rounded-2xl border border-stone-100">
+                    {[1, 2, 3, 4, 5].map((s) => (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => setFeedbackRating(s)}
+                        className="p-1 transform hover:scale-115 active:scale-95 transition-all cursor-pointer"
+                        title={`Rate ${s} stars`}
+                      >
+                        <Star
+                          size={24}
+                          fill={s <= feedbackRating ? "currentColor" : "none"}
+                          className={s <= feedbackRating ? "text-amber-400" : "text-stone-300"}
+                        />
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Quick Tags */}
+                  <div className="flex flex-wrap gap-1.5 mb-3">
+                    {["Delicious Food", "Fast Service", "Polite Waiter", "Warm Ambience"].map((tag) => {
+                      const isSel = feedbackTags.includes(tag);
+                      return (
+                        <button
+                          key={tag}
+                          type="button"
+                          onClick={() =>
+                            setFeedbackTags((prev) =>
+                              prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
+                            )
+                          }
+                          className={`text-[11px] font-bold px-2.5 py-1 rounded-full transition-all cursor-pointer ${
+                            isSel
+                              ? "bg-orange-600 text-white"
+                              : "bg-stone-100 hover:bg-stone-200 text-stone-700"
+                          }`}
+                        >
+                          {tag}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Comment & Submit Button */}
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="Chef or waiter compliments? (Optional)"
+                      value={feedbackComment}
+                      onChange={(e) => setFeedbackComment(e.target.value)}
+                      className="flex-1 px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-medium focus:bg-white focus:border-orange-500 outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleSubmitBillFeedback()}
+                      disabled={isSubmittingFeedback}
+                      className="px-4 py-2 bg-stone-900 hover:bg-black text-white rounded-xl text-xs font-black transition cursor-pointer shrink-0 disabled:opacity-50"
+                    >
+                      {isSubmittingFeedback ? "Saving..." : "Submit"}
+                    </button>
+                  </div>
+                </div>
+              )
             )}
 
             {/* Receipt Card */}

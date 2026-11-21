@@ -22,3 +22,17 @@ export function getDistanceFromLatLonInM(
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
 }
+
+export function getApiUrl(): string {
+  if (typeof window !== "undefined") {
+    // When running in browser on localhost or loopback, always prioritize local port 5000
+    if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
+      return "http://localhost:5000";
+    }
+    // When accessed via LAN IP or hostname (e.g. mobile phone on Wi-Fi), use current host with port 5000
+    if (window.location.hostname) {
+      return `${window.location.protocol}//${window.location.hostname}:5000`;
+    }
+  }
+  return process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+}
